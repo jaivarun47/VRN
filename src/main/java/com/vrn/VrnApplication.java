@@ -1,5 +1,6 @@
 package com.vrn;
 
+import com.vrn.cli.AddCommand;
 import com.vrn.cli.InitCommand;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -10,7 +11,8 @@ import picocli.CommandLine.Command;
         version = "VRN 1.0",
         mixinStandardHelpOptions = true,
         subcommands = {
-                InitCommand.class
+                InitCommand.class,
+                AddCommand.class
         }
 )
 public class VrnApplication implements Runnable {
