@@ -9,12 +9,23 @@ public class FileScanner {
 
     private final FileHasher hasher = new FileHasher();
 
-    public List<ScannedFile> scan(Path projectRoot) throws Exception {
+    public List<ScannedFile> scan(Path projectRoot, Path targetPath)
+            throws Exception {
 
         Path ignoreFile = projectRoot.resolve(".vrnignore");
         VrnIgnore ignore = new VrnIgnore(ignoreFile);
 
-        try (Stream<Path> paths = Files.walk(projectRoot)) {
+        Path target = projectRoot.resolve(targetPath).normalize();
+
+        if (!target.startsWith(projectRoot) || !Files.exists(target)) {
+            throw new IllegalArgumentException(
+                    "Invalid path: " + targetPath
+            );
+        }
+
+        try (Stream<Path> paths = Files.isDirectory(target)
+                ? Files.walk(target)
+                : Stream.of(target)) {
 
             return paths
                     .filter(Files::isRegularFile)
@@ -22,8 +33,10 @@ public class FileScanner {
                     .filter(path -> !ignore.isIgnored(path))
                     .map(path -> {
                         try {
-                            String hash = hasher.hash(projectRoot.resolve(path));
-                            return new ScannedFile(path, hash);
+                            // Read the file exactly once: get both hash and bytes.
+                            FileHasher.HashedFile hf =
+                                    hasher.hashWithBytes(projectRoot.resolve(path));
+                            return new ScannedFile(path, hf.hash(), hf.bytes());
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }

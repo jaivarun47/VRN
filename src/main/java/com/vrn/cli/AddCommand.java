@@ -29,9 +29,8 @@ public class AddCommand implements Runnable {
         Path projectRoot = Path.of(".").toAbsolutePath().normalize();
 
         try {
-
-            if (!Files.exists(projectRoot.resolve(".vrn"))) {
-                System.out.println("Not a VRN repository.");
+            if (!Files.isDirectory(projectRoot.resolve(".vrn"))) {
+                System.err.println("Not a VRN repository.");
                 return;
             }
 
@@ -41,28 +40,17 @@ public class AddCommand implements Runnable {
             StagingArea stagingArea =
                     new StagingArea(projectRoot.resolve(".vrn"));
 
-            List<ScannedFile> files = scanner.scan(projectRoot);
+            List<ScannedFile> files = scanner.scan(projectRoot, path);
 
             for (ScannedFile file : files) {
-
-                Path actualFile =
-                        projectRoot.resolve(file.path());
-
-                objectStore.store(
-                        actualFile,
-                        file.hash()
-                );
-
-                stagingArea.stage(
-                        file.path(),
-                        file.hash()
-                );
+                // Pass the already-read bytes so the file is not read twice.
+                objectStore.store(file.hash(), file.bytes());
+                stagingArea.stage(file.path(), file.hash());
             }
 
             System.out.println("Files staged successfully.");
 
-        } catch (Exception e){
-
+        } catch (Exception e) {
             System.err.println(
                     "Failed to add files: " + e.getMessage()
             );

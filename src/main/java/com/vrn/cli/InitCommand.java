@@ -1,5 +1,6 @@
 package com.vrn.cli;
 
+import com.vrn.core.AtomicFilePublisher;
 import picocli.CommandLine.Command;
 
 import java.nio.file.Files;
@@ -37,10 +38,9 @@ public class InitCommand implements Runnable {
             Files.createDirectories(snapshotsDirectory);
             Files.createDirectories(stagingDirectory);
 
-            Files.createFile(headFile);
             Files.createFile(configFile);
 
-            Files.writeString(headFile, "NONE");
+            new AtomicFilePublisher().replace(headFile, "NONE");
             Files.writeString(configFile, "version=1");
             Files.writeString(ignoreFile, ".vrn/\n");
 
