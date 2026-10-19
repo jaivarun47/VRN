@@ -25,12 +25,16 @@ public class StagingArea {
     }
 
     public void stage(Path path, String hash) throws Exception {
+        // Staging's existing platform-separator conversion is the only spelling conversion.
+        // Stored metadata is validated strictly and is never normalized during loading.
+        String relativePath = path.toString().replace('\\', '/');
+        SnapshotManifestValidator.validatePath(relativePath);
         try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(storage)) {
             new CommitRecovery(storage, files).recover();
             Files.createDirectories(stagingFile.getParent());
             Map<String, String> entries = readAllLocked();
-            String relativePath = path.toString().replace('\\', '/');
             entries.put(relativePath, hash);
+            SnapshotManifestValidator.validatePaths(entries.keySet());
             files.replace(stagingFile, MetadataCodec.encodeIndex(entries));
         }
     }
@@ -51,7 +55,9 @@ public class StagingArea {
             return new LinkedHashMap<>();
         }
         try {
-            return MetadataCodec.decodeIndex(Files.readAllLines(stagingFile));
+            Map<String, String> entries = MetadataCodec.decodeIndex(Files.readAllLines(stagingFile));
+            SnapshotManifestValidator.validatePaths(entries.keySet());
+            return entries;
         } catch (NoSuchFileException absent) {
             return new LinkedHashMap<>();
         }

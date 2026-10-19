@@ -1,6 +1,8 @@
 package com.vrn.core;
 
 import java.util.Map;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 
 /**
  * An immutable description of a single VRN snapshot (commit).
@@ -21,4 +23,10 @@ public record Snapshot(
         String message,
         Map<String, String> files
 ) {
+    public Snapshot {
+        // Freeze the manifest used for validation and serialization; retain its display spelling and order.
+        if (files != null) {
+            files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
+        }
+    }
 }

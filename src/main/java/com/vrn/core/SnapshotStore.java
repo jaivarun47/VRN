@@ -39,6 +39,8 @@ public class SnapshotStore {
 
     void saveLocked(Snapshot snapshot) throws Exception {
         String content = MetadataCodec.encodeSnapshot(snapshot);
+        // This also guards CommitService's complete parent-plus-staging candidate before any publication.
+        SnapshotManifestValidator.validatePaths(snapshot.files().keySet());
         Path finalPath = snapshotsDirectory.resolve(snapshot.id() + ".snapshot");
         if (!Files.notExists(finalPath)) {
             throw new FileAlreadyExistsException("Published snapshot already exists: " + finalPath);
@@ -64,6 +66,8 @@ public class SnapshotStore {
             );
         }
 
-        return MetadataCodec.decodeSnapshot(id, Files.readAllLines(snapshotPath));
+        Snapshot snapshot = MetadataCodec.decodeSnapshot(id, Files.readAllLines(snapshotPath));
+        SnapshotManifestValidator.validatePaths(snapshot.files().keySet());
+        return snapshot;
     }
 }

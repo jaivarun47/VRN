@@ -10,7 +10,7 @@ import java.util.Map;
 
 /**
  * Read-only layout and metadata checks for one supplied storage directory.
- * Checks the active manifest and optional staging/recovery metadata, not the
+ * Checks the active manifest's syntax/paths and optional staging/recovery metadata, not the
  * ancestry graph, all manifests, object existence or object hashes. The caller
  * must coordinate concurrent writers if a consistent multi-file view is needed.
  * Project ignore configuration is deliberately outside this storage definition.
@@ -44,7 +44,7 @@ public final class RepositoryLayout {
             Path index = storage.resolve("staging/index");
             if (Files.exists(index, LinkOption.NOFOLLOW_LINKS)) {
                 requireFile(index);
-                MetadataCodec.decodeIndex(Files.readAllLines(index));
+                SnapshotManifestValidator.validatePaths(MetadataCodec.decodeIndex(Files.readAllLines(index)).keySet());
             }
             Path pending = storage.resolve("staging/commit.pending");
             if (Files.exists(pending, LinkOption.NOFOLLOW_LINKS)) {
