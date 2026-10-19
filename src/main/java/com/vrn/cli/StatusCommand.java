@@ -5,6 +5,7 @@ import picocli.CommandLine.Command;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.Callable;
 
 /**
  * {@code vrn status}
@@ -35,10 +36,10 @@ import java.nio.file.Path;
         name = "status",
         description = "Show the working tree status"
 )
-public class StatusCommand implements Runnable {
+public class StatusCommand implements Callable<Integer> {
 
     @Override
-    public void run() {
+    public Integer call() {
 
         Path projectRoot = Path.of(".").toAbsolutePath().normalize();
         Path vrnDirectory = projectRoot.resolve(".vrn");
@@ -46,14 +47,16 @@ public class StatusCommand implements Runnable {
         try {
             if (!Files.isDirectory(vrnDirectory)) {
                 System.err.println("Not a VRN repository.");
-                return;
+                return 1;
             }
 
             WorkingTreeStatus status = WorkingTreeStatus.compute(projectRoot);
             printStatus(status);
+            return 0;
 
         } catch (Exception e) {
             System.err.println("Failed to get status: " + e.getMessage());
+            return 1;
         }
     }
 

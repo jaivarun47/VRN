@@ -7,7 +7,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 /**
  * Computes the working-tree status by comparing three states:
@@ -187,30 +186,20 @@ public class WorkingTreeStatus {
 
     /**
      * Walks the project root and produces a forward-slash-normalised
-     * relative-path → SHA-256 hash map for every non-ignored regular file.
+     * relative-path → SHA-256 hash map for every eligible project file.
      *
-     * <p>Uses {@link VrnIgnore} loaded from {@code .vrnignore}, exactly as
-     * {@link FileScanner} does, so the same exclusion rules apply.
+     * <p>Shares mandatory internal-directory pruning and ordinary ignore rules
+     * with {@link FileScanner} through {@link ProjectFileWalker}.
      */
     private static Map<String, String> buildWorkingDirMap(Path projectRoot) throws Exception {
-        Path ignoreFile = projectRoot.resolve(".vrnignore");
-        VrnIgnore ignore = new VrnIgnore(ignoreFile);
         FileHasher hasher = new FileHasher();
 
         Map<String, String> result = new HashMap<>();
 
-        try (Stream<Path> paths = Files.walk(projectRoot)) {
-            List<Path> regularFiles = paths
-                    .filter(Files::isRegularFile)
-                    .map(projectRoot::relativize)
-                    .filter(rel -> !ignore.isIgnored(rel))
-                    .toList();
-
-            for (Path rel : regularFiles) {
-                String normalized = rel.toString().replace('\\', '/');
-                String hash = hasher.hash(projectRoot.resolve(rel));
-                result.put(normalized, hash);
-            }
+        for (Path rel : ProjectFileWalker.collect(projectRoot, Path.of("."))) {
+            String normalized = rel.toString().replace('\\', '/');
+            String hash = hasher.hash(projectRoot.resolve(rel));
+            result.put(normalized, hash);
         }
 
         return result;

@@ -10,12 +10,13 @@ import picocli.CommandLine.Parameters;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 @Command(
         name = "add",
         description = "Stage files for the next snapshot"
 )
-public class AddCommand implements Runnable {
+public class AddCommand implements Callable<Integer> {
 
     @Parameters(
             index = "0",
@@ -24,14 +25,14 @@ public class AddCommand implements Runnable {
     private Path path;
 
     @Override
-    public void run() {
+    public Integer call() {
 
         Path projectRoot = Path.of(".").toAbsolutePath().normalize();
 
         try {
             if (!Files.isDirectory(projectRoot.resolve(".vrn"))) {
                 System.err.println("Not a VRN repository.");
-                return;
+                return 1;
             }
 
             FileScanner scanner = new FileScanner();
@@ -49,11 +50,13 @@ public class AddCommand implements Runnable {
             }
 
             System.out.println("Files staged successfully.");
+            return 0;
 
         } catch (Exception e) {
             System.err.println(
                     "Failed to add files: " + e.getMessage()
             );
+            return 1;
         }
     }
 }
