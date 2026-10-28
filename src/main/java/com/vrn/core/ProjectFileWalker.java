@@ -3,6 +3,7 @@ package com.vrn.core;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -14,11 +15,13 @@ final class ProjectFileWalker extends SimpleFileVisitor<Path> {
 
     private final Path root;
     private final VrnIgnore ignore;
+    private final WorkingTreePaths identity;
     private final List<Path> files = new ArrayList<>();
 
-    ProjectFileWalker(Path projectRoot, VrnIgnore ignore) {
+    ProjectFileWalker(Path projectRoot, VrnIgnore ignore) throws IOException {
         this.root = projectRoot.toAbsolutePath().normalize();
         this.ignore = ignore;
+        this.identity = new WorkingTreePaths(this.root);
     }
 
     static List<Path> collect(Path projectRoot, Path targetPath) throws Exception {
@@ -36,6 +39,13 @@ final class ProjectFileWalker extends SimpleFileVisitor<Path> {
         }
 
         ProjectFileWalker walker = new ProjectFileWalker(root, new VrnIgnore(root.resolve(".vrnignore")));
+        // Check the actual enclosing directory even for ignored explicit targets.
+        // A case-insensitive lexical prefix alone can admit a distinct sensitive sibling.
+        Path enclosing = Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS) ? target : target.getParent();
+        Path resolved = walker.identity.directory(enclosing);
+        if (isReservedRelative(resolved)) {
+            throw new IllegalArgumentException("Cannot add reserved internal repository path: " + targetPath);
+        }
         Files.walkFileTree(target, walker);
         return List.copyOf(walker.files);
     }
@@ -47,19 +57,51 @@ final class ProjectFileWalker extends SimpleFileVisitor<Path> {
     }
 
     @Override
-    public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
-        return isInternal(root, directory) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+    public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
+        if (isInternal(root, directory)) {
+            return FileVisitResult.SKIP_SUBTREE;
+        }
+        if (attributes.isSymbolicLink() || attributes.isOther()) {
+            if (ignore.isIgnored(root.relativize(directory))) {
+                return FileVisitResult.SKIP_SUBTREE;
+            }
+            throw unsupportedLink(directory);
+        }
+        Path relative = identity.directory(directory);
+        if (isReservedRelative(relative)) {
+            return FileVisitResult.SKIP_SUBTREE;
+        }
+        return FileVisitResult.CONTINUE;
     }
 
     @Override
     public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-        // Keep the existing regular-file check (including file links); do not follow directory links.
-        if (!isInternal(root, file) && Files.isRegularFile(file)) {
-            Path relative = root.relativize(file);
+        if (isInternal(root, file) || ignore.isIgnored(root.relativize(file))) {
+            return FileVisitResult.CONTINUE;
+        }
+        if (attributes.isSymbolicLink() || attributes.isOther()) {
+            throw unsupportedLink(file);
+        }
+        if (attributes.isRegularFile()) {
+            Path relative = identity.file(file);
+            if (isReservedRelative(relative)) {
+                throw new IOException("Unsafe repository boundary: reserved internal repository path: " + file);
+            }
+            // An explicit differently-cased lookup must not bypass an ignore rule
+            // that matches the actual directory-entry spelling.
             if (!ignore.isIgnored(relative)) {
                 files.add(relative);
             }
         }
         return FileVisitResult.CONTINUE;
+    }
+
+    private static boolean isReservedRelative(Path relative) {
+        String first = relative.getName(0).toString();
+        return first.equalsIgnoreCase(".vrn") || first.equalsIgnoreCase(".vrnauto");
+    }
+
+    private static IOException unsupportedLink(Path path) {
+        return new IOException("VRN support limitation: symbolic links and reparse entries are not supported: " + path);
     }
 }

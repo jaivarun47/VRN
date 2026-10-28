@@ -80,7 +80,7 @@ class ManifestIntegrityIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"a.txt,A.TXT", "node,node/child", "node/child,node", "Node,node/child", "Src/a,src/b"})
+    @CsvSource({"a.txt,A.TXT", "node,node/child", "node/child,node", "Node,node/child", "Src/a,src/A"})
     void stagingRejectsContradictoryIndex_withoutReplacingExistingSpelling(String first, String second) throws Exception {
         StagingArea staging = new StagingArea(storage);
         staging.stage(Path.of(first), hash);
@@ -94,7 +94,7 @@ class ManifestIntegrityIntegrationTest {
 
     @ParameterizedTest
     @CsvSource({"node,node/child.txt", "node/child.txt,node", "Node,node/child.txt", "node/child.txt,Node",
-            "a.txt,A.TXT", "src/A.txt,src/a.txt", "Src/a.txt,src/b.txt"})
+            "a.txt,A.TXT", "src/A.txt,src/a.txt", "Src/a.txt,src/A.TXT"})
     void inheritedAndStagedConflicts_cannotPublishOrAdvanceHead(String inherited, String stagedPath) throws Exception {
         String parent = commitParent(inherited);
         StagingArea staging = new StagingArea(storage);

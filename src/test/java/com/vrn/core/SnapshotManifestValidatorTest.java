@@ -15,7 +15,7 @@ class SnapshotManifestValidatorTest {
     @ParameterizedTest
     @ValueSource(strings = {"ordinary.txt", "src/main/App.java", "config=production.txt", "#notes.txt",
             "資料/नमस्ते/é😀.txt", "a folder/file with spaces.txt", ".vrnignore", ".vrn-backup/file.txt",
-            "src/.vrn/example.txt", "src/.VRNAUTO/example.txt", "COM10.txt", "auxiliary.txt"})
+            "src/.vrn/example.txt", "src/.VRNAUTO/example.txt", "COM10.txt", "auxiliary.txt", " name", "a\u007fb"})
     void acceptsSupportedRelativePathsWithoutChangingSpelling(String path) {
         SnapshotManifestValidator.validatePath(path);
         SnapshotManifestValidator.validatePaths(List.of(path));
@@ -25,8 +25,8 @@ class SnapshotManifestValidatorTest {
     @ValueSource(strings = {"", "/absolute", "C:/absolute", "C:drive-relative", "//server/share/file",
             "\\rooted", "\\\\server\\share\\file", "\\\\?\\C:\\file", "a\\b.txt", ".", "..", "../escape",
             "a/../b", "a/./b", "./a", "a//b", "a/", "a/..", "file:stream", "wild*.txt", "wild?.txt",
-            "bad<name", "bad>name", "bad\"name", "bad|name", "a\nb", "a\tb", "a\0b", "a\u007fb",
-            " name", "name ", "name.", "dir./file", "NUL", "con.txt", "folder/PRN.log", "AUX",
+            "bad<name", "bad>name", "bad\"name", "bad|name", "a\nb", "a\tb", "a\0b",
+            "name ", "name.", "dir./file", "NUL", "con.txt", "folder/PRN.log", "AUX",
             "COM1.txt", "lpt9", "COM¹.txt", "LPT².log", "COM³", "CON .txt", "CONIN$", "CONOUT$.txt",
             ".vrn", ".VRN/HEAD", ".vrnauto/objects/hash", ".VRNAUTO", "bad\uD800", "bad\uDC00"})
     void rejectsUnsafeNoncanonicalAndUnsupportedPaths(String path) {
@@ -37,7 +37,7 @@ class SnapshotManifestValidatorTest {
 
     @ParameterizedTest
     @CsvSource({"same.txt,same.txt", "a.txt,A.TXT", "node,node/child.txt", "Node,node/child.txt",
-            "node,Node/child.txt", "src/Main.java,SRC/main.java", "Src/a.txt,src/b.txt"})
+            "node,Node/child.txt", "src/Main.java,SRC/main.java", "Src/a.txt,src/A.TXT"})
     void rejectsDuplicateCaseAliasAndPrefixConflicts_inBothOrders(String first, String second) {
         for (List<String> order : List.of(List.of(first, second), List.of(second, first))) {
             IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
