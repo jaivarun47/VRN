@@ -90,15 +90,21 @@ class WindowsPathPolicyRefinementTest {
         new RepositoryInitializer().initialize(root);
         Path storage = root.resolve(".vrn");
         StagingArea staging = new StagingArea(storage);
-        staging.stage(Path.of("Src/A.java"), "first-hash");
+        byte[] firstBytes = "first contents".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] secondBytes = "second contents".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String firstHash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(firstBytes));
+        String secondHash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(secondBytes));
+        new ObjectStore(storage).store(firstHash, firstBytes);
+        new ObjectStore(storage).store(secondHash, secondBytes);
+        staging.stage(Path.of("Src/A.java"), firstHash);
         String first = new CommitService(storage).commit("first spelling").snapshotId();
-        staging.stage(Path.of("src/B.java"), "second-hash");
+        staging.stage(Path.of("src/B.java"), secondHash);
 
         String second = new CommitService(storage).commit("another distinct file").snapshotId();
 
         Snapshot loaded = new SnapshotStore(storage).load(second);
         assertEquals(first, loaded.parentId());
-        assertEquals(Map.of("Src/A.java", "first-hash", "src/B.java", "second-hash"), loaded.files());
+        assertEquals(Map.of("Src/A.java", firstHash, "src/B.java", secondHash), loaded.files());
         assertTrue(staging.readAll().isEmpty());
     }
 

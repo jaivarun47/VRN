@@ -359,6 +359,7 @@ class VrnStatusTest {
         Path ignoreFile = tempDir.resolve(".vrnignore");
         String ignoreHash = new FileHasher().hash(ignoreFile);
         StagingArea staging = new StagingArea(vrnDir);
+        new com.vrn.core.ObjectStore(vrnDir).store(ignoreHash, Files.readAllBytes(ignoreFile));
         staging.stage(Path.of(".vrnignore"), ignoreHash);
 
         String firstCommitId = CommitCommand.executeCommit(tempDir, "Initial commit with .vrnignore");
@@ -373,6 +374,7 @@ class VrnStatusTest {
         Path secondFile = tempDir.resolve("hello.txt");
         Files.writeString(secondFile, "hello world");
         String secondHash = new FileHasher().hash(secondFile);
+        new com.vrn.core.ObjectStore(vrnDir).store(secondHash, Files.readAllBytes(secondFile));
         staging.stage(Path.of("hello.txt"), secondHash);
 
         // Second commit: only hello.txt was in staging index
@@ -408,6 +410,7 @@ class VrnStatusTest {
         Files.createDirectories(snapshotsDir);
         Files.createDirectories(stagingDir);
         Files.writeString(headFile, "NONE");
+        Files.writeString(vrnDir.resolve("config"), "version=1");
         Files.writeString(tempDir.resolve(".vrnignore"), ".vrn/\n");
     }
 

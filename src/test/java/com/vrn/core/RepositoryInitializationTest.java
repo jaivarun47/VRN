@@ -114,8 +114,8 @@ class RepositoryInitializationTest {
         assertEquals(0, result.exitCode(), result.output());
         assertEquals(before, tree());
         RepositoryLayout.validate(root.resolve(".vrn"));
-        assertEquals(1, cli("add", ".").exitCode());
-        assertEquals(1, cli("status").exitCode());
+        assertEquals(0, cli("add", ".").exitCode());
+        assertEquals(0, cli("status").exitCode());
         assertFalse(Files.exists(root.resolve(".vrnignore")));
     }
 

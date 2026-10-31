@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
-import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
@@ -24,11 +24,10 @@ public final class RepositoryMutationGuard implements AutoCloseable {
     }
 
     public static RepositoryMutationGuard acquire(Path storage) throws IOException {
-        if (!Files.isDirectory(storage)) {
-            throw new IOException("Repository storage directory does not exist: " + storage);
-        }
-        FileChannel channel = FileChannel.open(storage.resolve("mutation.lock"),
-                StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+        RepositoryLayout.preflight(storage);
+        Path lockPath = new MetadataPaths(storage).file("mutation.lock", false);
+        FileChannel channel = FileChannel.open(lockPath,
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
         try {
             FileLock lock;
             try {
@@ -39,6 +38,8 @@ public final class RepositoryMutationGuard implements AutoCloseable {
             if (lock == null) {
                 throw new IOException("Repository is busy; retry the operation: " + storage);
             }
+            // Recheck under the guard; the first check makes acquiring the guard itself safe.
+            RepositoryLayout.preflight(storage);
             return new RepositoryMutationGuard(channel, lock);
         } catch (IOException | RuntimeException failure) {
             try {

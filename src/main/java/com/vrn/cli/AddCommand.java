@@ -4,6 +4,8 @@ import com.vrn.core.FileScanner;
 import com.vrn.core.ObjectStore;
 import com.vrn.core.ScannedFile;
 import com.vrn.core.StagingArea;
+import com.vrn.core.RepositoryLayout;
+import com.vrn.core.RepositoryMutationGuard;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
@@ -33,6 +35,10 @@ public class AddCommand implements Callable<Integer> {
             if (!Files.isDirectory(projectRoot.resolve(".vrn"))) {
                 System.err.println("Not a VRN repository.");
                 return 1;
+            }
+
+            try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(projectRoot.resolve(".vrn"))) {
+                RepositoryLayout.validate(projectRoot.resolve(".vrn"));
             }
 
             FileScanner scanner = new FileScanner();

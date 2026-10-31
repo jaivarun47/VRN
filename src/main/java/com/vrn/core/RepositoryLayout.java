@@ -1,8 +1,7 @@
 package com.vrn.core;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -23,49 +22,51 @@ public final class RepositoryLayout {
     public static void validate(Path storageDirectory) throws IOException {
         Path storage = storageDirectory.toAbsolutePath().normalize();
         try {
-            requireDirectory(storage);
-            for (String directory : List.of("objects", "snapshots", "staging")) {
-                requireDirectory(storage.resolve(directory));
-            }
-            requireFile(storage.resolve("config"));
-            validateConfig(storage.resolve("config"));
-            requireFile(storage.resolve("HEAD"));
-            List<String> headLines = Files.readAllLines(storage.resolve("HEAD"));
-            if (headLines.size() != 1 || headLines.getFirst().strip().isEmpty()) {
-                throw new IOException("HEAD must contain one snapshot identifier or NONE");
-            }
-            String head = headLines.getFirst().strip();
+            preflight(storage);
+            MetadataPaths paths = new MetadataPaths(storage);
+            String head = paths.readString("HEAD").strip();
             if (!head.equals("NONE")) {
-                MetadataCodec.validateSnapshotId(head);
-                requireFile(storage.resolve("snapshots").resolve(head + ".snapshot"));
                 new SnapshotStore(storage).load(head);
             }
 
-            Path index = storage.resolve("staging/index");
-            if (Files.exists(index, LinkOption.NOFOLLOW_LINKS)) {
-                requireFile(index);
-                SnapshotManifestValidator.validatePaths(MetadataCodec.decodeIndex(Files.readAllLines(index)).keySet());
-            }
-            Path pending = storage.resolve("staging/commit.pending");
-            if (Files.exists(pending, LinkOption.NOFOLLOW_LINKS)) {
-                requireFile(pending);
-                // Inspect the existing recovery protocol without deleting or rewriting anything.
-                new CommitRecovery(storage, new AtomicFilePublisher()).hasConsumedIndex();
-            }
-            Path lock = storage.resolve("mutation.lock");
-            if (Files.exists(lock, LinkOption.NOFOLLOW_LINKS)) {
-                requireFile(lock);
-            }
+            try {
+                SnapshotManifestValidator.validatePaths(MetadataCodec.decodeIndex(paths.readLines("staging/index")).keySet());
+            } catch (NoSuchFileException absentIndex) { /* An index is optional. */ }
+            // Inspection only; an absent record is handled by the recovery reader, without mutation.
+            new CommitRecovery(storage, new AtomicFilePublisher()).hasConsumedIndex();
         } catch (Exception failure) {
             throw new IOException("Invalid or incomplete VRN repository at " + storage + ": "
                     + failure.getMessage() + "; existing contents were preserved. Explicit recovery is required.", failure);
         }
     }
 
-    private static void validateConfig(Path config) throws IOException {
+    /** Format/structure gate shared by guarded APIs; no recovery, locking, graph or object hashing. */
+    static void preflight(Path storage) throws IOException {
+        MetadataPaths paths = new MetadataPaths(storage);
+        for (String directory : List.of("objects", "snapshots", "staging")) paths.directory(directory);
+        // Check all known metadata leaves before reading any of them or creating the lock.
+        paths.file("config", true);
+        paths.file("HEAD", true);
+        paths.file("staging/index", false);
+        paths.file("staging/commit.pending", false);
+        paths.file("mutation.lock", false);
+        validateConfig(paths.readLines("config"));
+        List<String> lines = paths.readLines("HEAD");
+        if (lines.size() != 1 || lines.getFirst().strip().isEmpty()) {
+            throw new IOException("Invalid repository metadata: HEAD must contain one snapshot identifier or NONE");
+        }
+        String id = lines.getFirst().strip();
+        if (!id.equals("NONE")) {
+            try { MetadataCodec.validateSnapshotId(id); }
+            catch (IllegalArgumentException invalid) { throw new IOException(invalid.getMessage(), invalid); }
+            paths.file("snapshots/" + id + ".snapshot", true);
+        }
+    }
+
+    private static void validateConfig(List<String> lines) throws IOException {
         // Current config is UTF-8 key=value text. Retain unknown settings; reject ambiguous duplicates.
         Map<String, String> settings = new HashMap<>();
-        for (String raw : Files.readAllLines(config)) {
+        for (String raw : lines) {
             String line = raw.strip();
             if (line.isEmpty() || line.startsWith("#")) {
                 continue;
@@ -88,15 +89,4 @@ public final class RepositoryLayout {
         }
     }
 
-    private static void requireDirectory(Path path) throws IOException {
-        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("Required directory is missing or has the wrong type: " + path);
-        }
-    }
-
-    private static void requireFile(Path path) throws IOException {
-        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("Required regular file is missing or has the wrong type: " + path);
-        }
-    }
 }

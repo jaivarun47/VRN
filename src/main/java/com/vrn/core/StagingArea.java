@@ -1,6 +1,5 @@
 package com.vrn.core;
 
-import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -9,7 +8,6 @@ import java.util.Map;
 public class StagingArea {
 
     private final Path storage;
-    private final Path stagingFile;
     private final AtomicFilePublisher files;
 
     public StagingArea(Path vrnDirectory) {
@@ -19,9 +17,6 @@ public class StagingArea {
     StagingArea(Path vrnDirectory, AtomicFilePublisher files) {
         this.storage = vrnDirectory;
         this.files = files;
-        this.stagingFile = vrnDirectory
-                .resolve("staging")
-                .resolve("index");
     }
 
     public void stage(Path path, String hash) throws Exception {
@@ -31,11 +26,10 @@ public class StagingArea {
         SnapshotManifestValidator.validatePath(relativePath);
         try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(storage)) {
             new CommitRecovery(storage, files).recover();
-            Files.createDirectories(stagingFile.getParent());
             Map<String, String> entries = readAllLocked();
             entries.put(relativePath, hash);
             SnapshotManifestValidator.validatePaths(entries.keySet());
-            files.replace(stagingFile, MetadataCodec.encodeIndex(entries));
+            files.replace(new MetadataPaths(storage).file("staging/index", false), MetadataCodec.encodeIndex(entries));
         }
     }
 
@@ -51,11 +45,13 @@ public class StagingArea {
     }
 
     Map<String, String> readAllLocked() throws Exception {
+        MetadataPaths paths = new MetadataPaths(storage);
+        paths.file("staging/index", false);
         if (new CommitRecovery(storage, files).hasConsumedIndex()) {
             return new LinkedHashMap<>();
         }
         try {
-            Map<String, String> entries = MetadataCodec.decodeIndex(Files.readAllLines(stagingFile));
+            Map<String, String> entries = MetadataCodec.decodeIndex(paths.readLines("staging/index"));
             SnapshotManifestValidator.validatePaths(entries.keySet());
             return entries;
         } catch (NoSuchFileException absent) {
@@ -70,7 +66,7 @@ public class StagingArea {
     public void clear() throws Exception {
         try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(storage)) {
             new CommitRecovery(storage, files).recover();
-            files.delete(stagingFile);
+            files.delete(new MetadataPaths(storage).file("staging/index", false));
         }
     }
 

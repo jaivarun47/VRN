@@ -161,7 +161,7 @@ class InternalRepositoryProtectionTest {
         String manualHead = Files.readString(manual.resolve("HEAD"));
         assertEquals(entries, new SnapshotStore(manual).load(manualHead).files());
 
-        write(".vrn/config", "changed bookkeeping");
+        write(".vrn/config", "version=1\nbookkeeping=changed\n");
         write(".vrn/objects/new-internal-object", "new manual object");
         write(".vrnauto/HEAD", "changed automatic pointer");
         write(".vrnauto/snapshots/new", "new automatic metadata");
@@ -173,23 +173,22 @@ class InternalRepositoryProtectionTest {
     }
 
     @Test
-    void missingIgnoreFailsClosed_forWholeProjectAddAndStatus() throws Exception {
-        write("ordinary.txt", "must not be staged by a failed scan");
+    void missingOptionalIgnoreStillProtectsBothInternalTrees_forWholeProjectAddAndStatus() throws Exception {
+        write("ordinary.txt", "ordinary project content");
         Files.delete(root.resolve(".vrnignore"));
 
-        assertThrows(NoSuchFileException.class, () -> new FileScanner().scan(root, Path.of(".")));
-        assertThrows(NoSuchFileException.class, () -> WorkingTreeStatus.compute(root));
+        assertEquals(Set.of("ordinary.txt"), scanned(Path.of(".")));
+        assertEquals(List.of("ordinary.txt"), WorkingTreeStatus.compute(root).untracked);
         Run add = cli("add", ".");
-        assertEquals(1, add.exitCode(), add.output());
-        assertTrue(add.output().contains("Failed to add files:"));
-        assertTrue(add.output().contains(".vrnignore"));
+        assertEquals(0, add.exitCode(), add.output());
+        assertEquals(Set.of("ordinary.txt"), new StagingArea(manual).readAll().keySet());
         Run status = cli("status");
-        assertEquals(1, status.exitCode(), status.output());
-        assertTrue(status.output().contains("Failed to get status:"));
+        assertEquals(0, status.exitCode(), status.output());
+        assertTrue(status.output().contains("ordinary.txt"));
         assertFalse(status.output().contains("working directory clean"));
-        assertTrue(new StagingArea(manual).readAll().isEmpty());
-        assertFalse(Files.exists(manual.resolve("staging/index")));
-        assertEquals(Set.of("private"), objectNames(manual));
+        assertTrue(Files.exists(manual.resolve("staging/index")));
+        assertFalse(Files.exists(root.resolve(".vrnignore")));
+        assertEquals(Set.of("private", new FileHasher().hash(root.resolve("ordinary.txt"))), objectNames(manual));
         assertEquals(Set.of("private"), objectNames(automatic));
     }
 

@@ -1,7 +1,6 @@
 package com.vrn.core;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -16,14 +15,20 @@ public final class CommitService {
 
     private final Path storage;
     private final AtomicFilePublisher files;
+    private final ObjectStore objects;
 
     public CommitService(Path storage) {
         this(storage, new AtomicFilePublisher());
     }
 
     CommitService(Path storage, AtomicFilePublisher files) {
+        this(storage, files, new ObjectStore(storage));
+    }
+
+    CommitService(Path storage, AtomicFilePublisher files, ObjectStore objects) {
         this.storage = storage;
         this.files = files;
+        this.objects = objects;
     }
 
     /**
@@ -37,6 +42,7 @@ public final class CommitService {
         }
         String publishedId = null;
         String warning = null;
+        objects.requireSafeStorage();
         try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(storage)) {
             CommitRecovery recovery = new CommitRecovery(storage, files);
             recovery.recover();
@@ -46,24 +52,25 @@ public final class CommitService {
                 throw new IllegalStateException("Nothing to commit. Stage files first with: vrn add <path>");
             }
 
-            Path head = storage.resolve("HEAD");
-            String parentId = Files.readString(head).strip();
+            String parentId = new MetadataPaths(storage).readString("HEAD").strip();
             SnapshotStore snapshots = new SnapshotStore(storage, files);
             Map<String, String> manifest = new LinkedHashMap<>();
             if (!parentId.equals("NONE")) {
                 manifest.putAll(snapshots.load(parentId).files());
             }
             manifest.putAll(staged);
+            // Verify the complete inherited-plus-staged candidate before publishing any new metadata.
+            objects.verifyAll(manifest.values());
             String id = UUID.randomUUID().toString().replace("-", "");
             snapshots.saveLocked(new Snapshot(id, parentId, System.currentTimeMillis(), message, manifest));
             recovery.prepare(id, parentId);
             try {
-                files.replace(head, id);
+                files.replace(new MetadataPaths(storage).file("HEAD", true), id);
             } catch (Exception publicationFailure) {
                 // Reconcile while still holding the guard: another commit must
                 // not advance HEAD between a rename error and this inspection.
                 try {
-                    if (Files.readString(head).strip().equals(id)) {
+                    if (new MetadataPaths(storage).readString("HEAD").strip().equals(id)) {
                         publishedId = id;
                     }
                 } catch (Exception inspectionFailure) {

@@ -88,6 +88,8 @@ class RepositoryMutationGuardTest {
     private Path initialize(Path storage) throws IOException {
         Files.createDirectories(storage.resolve("staging"));
         Files.createDirectories(storage.resolve("snapshots"));
+        Files.createDirectories(storage.resolve("objects"));
+        Files.writeString(storage.resolve("config"), "version=1");
         Files.writeString(storage.resolve("HEAD"), "NONE");
         return storage;
     }

@@ -1,6 +1,7 @@
 package com.vrn.cli;
 
 import com.vrn.core.CommitService;
+import com.vrn.core.ObjectIntegrityException;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -43,6 +44,10 @@ public class CommitCommand implements Callable<Integer> {
             System.out.println("Committed snapshot " + result.snapshotId());
             printWarning(result);
             return 0;
+        } catch (ObjectIntegrityException e) {
+            System.err.println("Commit aborted: " + e.getMessage());
+            System.err.println("No snapshot was published by this attempt; staging was not cleared.");
+            return 1;
         } catch (Exception e) {
             System.err.println("Commit operation stopped: " + e.getMessage());
             return 1;

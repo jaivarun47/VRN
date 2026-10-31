@@ -4,8 +4,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 
 /**
  * Publishes a complete file through a unique temporary file in its directory.
@@ -36,7 +38,8 @@ public class AtomicFilePublisher {
 
     // Narrow filesystem seams also permit deterministic publication-failure tests.
     protected void write(Path temporary, byte[] content) throws IOException {
-        Files.write(temporary, content);
+        Files.write(temporary, content, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING,
+                LinkOption.NOFOLLOW_LINKS);
     }
 
     protected void move(Path temporary, Path destination) throws IOException {

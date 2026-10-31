@@ -37,6 +37,8 @@ class MetadataFormatTest {
         Files.createDirectories(storage.resolve("snapshots"));
         Files.createDirectories(storage.resolve("objects"));
         Files.createDirectories(storage.resolve("staging"));
+        Files.writeString(storage.resolve("config"), "version=1");
+        Files.writeString(storage.resolve("HEAD"), "NONE");
         snapshotFile = storage.resolve("snapshots/" + ID + ".snapshot");
         indexFile = storage.resolve("staging/index");
         snapshots = new SnapshotStore(storage);

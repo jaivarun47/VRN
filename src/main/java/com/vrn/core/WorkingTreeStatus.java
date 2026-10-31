@@ -1,6 +1,5 @@
 package com.vrn.core;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -88,10 +87,13 @@ public class WorkingTreeStatus {
 
         // Load staged entries (empty map if no index file).
         StagingArea stagingArea = new StagingArea(vrnDirectory);
-        Map<String, String> staged = stagingArea.readAll();
-
-        // Load committed entries (empty map if HEAD == "NONE").
-        Map<String, String> committed = loadCommitted(vrnDirectory);
+        Map<String, String> staged;
+        Map<String, String> committed;
+        try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(vrnDirectory)) {
+            RepositoryLayout.validate(vrnDirectory);
+            staged = stagingArea.readAllLocked();
+            committed = loadCommitted(vrnDirectory);
+        }
 
         // Build the working-directory map: path-string → hash.
         // Only hashes are needed here (no bytes) — use FileHasher.hash().
@@ -173,8 +175,7 @@ public class WorkingTreeStatus {
      * HEAD is {@code "NONE"} (no commits yet).
      */
     private static Map<String, String> loadCommitted(Path vrnDirectory) throws Exception {
-        Path headFile = vrnDirectory.resolve("HEAD");
-        String headId = Files.readString(headFile).strip();
+        String headId = new MetadataPaths(vrnDirectory).readString("HEAD").strip();
 
         if (headId.equals("NONE")) {
             return Collections.emptyMap();

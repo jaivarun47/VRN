@@ -3,17 +3,20 @@ package com.vrn.core;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.LinkOption;
 
 /**
  * Reads and writes snapshot metadata files in the supplied storage directory.
  *
  * <p>New files use the versioned, lossless representation in {@link MetadataCodec}.
  * A bounded subset of legacy metadata is readable without automatic migration.
+ * This is a metadata store, not a content-integrity audit. CommitService verifies
+ * all candidate objects before calling saveLocked and advancing HEAD; metadata
+ * inspection remains available even when historical objects are damaged.
  */
 public class SnapshotStore {
 
     private final Path storage;
-    private final Path snapshotsDirectory;
     private final AtomicFilePublisher files;
 
     public SnapshotStore(Path vrnDirectory) {
@@ -22,7 +25,6 @@ public class SnapshotStore {
 
     SnapshotStore(Path vrnDirectory, AtomicFilePublisher files) {
         this.storage = vrnDirectory;
-        this.snapshotsDirectory = vrnDirectory.resolve("snapshots");
         this.files = files;
     }
 
@@ -41,8 +43,8 @@ public class SnapshotStore {
         String content = MetadataCodec.encodeSnapshot(snapshot);
         // This also guards CommitService's complete parent-plus-staging candidate before any publication.
         SnapshotManifestValidator.validatePaths(snapshot.files().keySet());
-        Path finalPath = snapshotsDirectory.resolve(snapshot.id() + ".snapshot");
-        if (!Files.notExists(finalPath)) {
+        Path finalPath = new MetadataPaths(storage).file("snapshots/" + snapshot.id() + ".snapshot", false);
+        if (!Files.notExists(finalPath, LinkOption.NOFOLLOW_LINKS)) {
             throw new FileAlreadyExistsException("Published snapshot already exists: " + finalPath);
         }
         files.replace(finalPath, content);
@@ -58,15 +60,16 @@ public class SnapshotStore {
     public Snapshot load(String id) throws Exception {
 
         MetadataCodec.validateSnapshotId(id);
-        Path snapshotPath = snapshotsDirectory.resolve(id + ".snapshot");
+        RepositoryLayout.preflight(storage);
+        Path snapshotPath = new MetadataPaths(storage).file("snapshots/" + id + ".snapshot", false);
 
-        if (!Files.exists(snapshotPath)) {
+        if (!Files.exists(snapshotPath, LinkOption.NOFOLLOW_LINKS)) {
             throw new IllegalArgumentException(
                     "Snapshot not found: " + id
             );
         }
 
-        Snapshot snapshot = MetadataCodec.decodeSnapshot(id, Files.readAllLines(snapshotPath));
+        Snapshot snapshot = MetadataCodec.decodeSnapshot(id, new MetadataPaths(storage).readLines("snapshots/" + id + ".snapshot"));
         SnapshotManifestValidator.validatePaths(snapshot.files().keySet());
         return snapshot;
     }

@@ -2,6 +2,9 @@ package com.vrn.core;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 
 public class VrnIgnore {
@@ -9,7 +12,18 @@ public class VrnIgnore {
     private final List<String> rules;
 
     public VrnIgnore(Path ignoreFile) throws Exception {
-        this.rules = Files.readAllLines(ignoreFile)
+        List<String> lines;
+        try { lines = Files.readAllLines(ignoreFile); }
+        catch (NoSuchFileException absent) {
+            try {
+                Files.readAttributes(ignoreFile, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            } catch (NoSuchFileException missingEntry) {
+                this.rules = List.of();
+                return;
+            }
+            throw absent; // An existing dangling link is not an absent optional configuration.
+        }
+        this.rules = lines
                 .stream()
                 .map(String::trim)
                 .filter(line -> !line.isEmpty())

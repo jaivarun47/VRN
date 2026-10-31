@@ -38,6 +38,15 @@ final class ProjectFileWalker extends SimpleFileVisitor<Path> {
             throw new IllegalArgumentException("Invalid path: " + targetPath);
         }
 
+        // Establish actual containment before relativizing: Windows lexical equality
+        // alone can collapse a distinct case-sensitive sibling into this root.
+        Path suppliedEnclosing = Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS) ? target : target.getParent();
+        new WorkingTreePaths(root).directory(suppliedEnclosing);
+        // A caller-selected project alias is an anchor, unlike an internal metadata alias.
+        Path realRoot = root.toRealPath();
+        target = realRoot.resolve(root.relativize(target));
+        root = realRoot;
+
         ProjectFileWalker walker = new ProjectFileWalker(root, new VrnIgnore(root.resolve(".vrnignore")));
         // Check the actual enclosing directory even for ignored explicit targets.
         // A case-insensitive lexical prefix alone can admit a distinct sensitive sibling.

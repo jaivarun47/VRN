@@ -8,6 +8,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.HexFormat;
+import java.security.MessageDigest;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -40,6 +42,7 @@ class VrnCommitTest {
         Files.createDirectories(snapshotsDir);
         Files.createDirectories(stagingDir);
         Files.writeString(headFile, "NONE");
+        Files.writeString(vrnDir.resolve("config"), "version=1");
 
         // Minimal .vrnignore so FileScanner does not throw.
         Files.writeString(tempDir.resolve(".vrnignore"), ".vrn/\n");
@@ -84,7 +87,7 @@ class VrnCommitTest {
     void objectStore_storesContentByHash() throws Exception {
         ObjectStore store = new ObjectStore(vrnDir);
         byte[] content = "hello".getBytes();
-        String hash = "abc123";
+        String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
 
         store.store(hash, content);
 
@@ -97,12 +100,13 @@ class VrnCommitTest {
     void objectStore_doesNotOverwriteExistingObject() throws Exception {
         ObjectStore store = new ObjectStore(vrnDir);
         byte[] original = "first".getBytes();
-        String hash = "aabbcc";
+        String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(original));
 
         store.store(hash, original);
 
-        // Second call with different bytes must be skipped.
-        store.store(hash, "second".getBytes());
+        // Valid reuse succeeds; inconsistent incoming bytes must fail without overwriting the object.
+        store.store(hash, original);
+        assertThrows(ObjectIntegrityException.class, () -> store.store(hash, "second".getBytes()));
 
         assertArrayEquals(original, Files.readAllBytes(objectsDir.resolve(hash)));
     }

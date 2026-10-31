@@ -48,7 +48,8 @@ public final class RepositoryInitializer {
         Files.createDirectory(storage.resolve("objects"));
         Files.createDirectory(storage.resolve("snapshots"));
         Files.createDirectory(storage.resolve("staging"));
-        files.replace(storage.resolve("HEAD"), "NONE");
+        MetadataPaths paths = new MetadataPaths(storage);
+        files.replace(paths.file("HEAD", false), "NONE");
 
         try {
             // CREATE_NEW also protects a user file appearing after the preflight check.
@@ -63,7 +64,8 @@ public final class RepositoryInitializer {
         }
 
         // All other initialization work precedes this atomic completion publication.
-        files.replace(storage.resolve("config"), "version=1");
+        for (String directory : java.util.List.of("objects", "snapshots", "staging")) paths.directory(directory);
+        files.replace(paths.file("config", false), "version=1");
         return true;
     }
 
