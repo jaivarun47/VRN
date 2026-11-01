@@ -21,16 +21,16 @@ import java.util.concurrent.Callable;
  *   <li><b>Staged new file</b>       – in staging, NOT in HEAD snapshot</li>
  *   <li><b>Staged modification</b>   – in staging AND in HEAD, hashes differ</li>
  *   <li><b>Modified (not staged)</b> – tracked file changed on disk but not staged</li>
- *   <li><b>Deleted</b>               – committed file absent from disk and not in staging</li>
+ *   <li><b>Deleted</b>               – committed or staged regular file absent from disk</li>
  *   <li><b>Untracked</b>             – on disk, not ignored, not staged, not committed</li>
  *   <li><b>Nothing to commit</b>     – none of the above</li>
  * </ul>
  *
  * <h2>Deletion limitation</h2>
  * The staging index only records additions and modifications ({@code path=hash}).
- * There is no sentinel value to represent a staged deletion.  A committed file
- * deleted from disk without re-staging is reported as "deleted (not staged)".
- * Explicitly staging a deletion would require a future {@code vrn rm} command.
+ * There is no operation to select a deletion for commit. A missing committed or
+ * staged file is reported as "deleted (not staged)", independently of its staged
+ * addition/modification. Status does not remove the staged entry or change history.
  */
 @Command(
         name = "status",
