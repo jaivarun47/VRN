@@ -2,7 +2,16 @@ plugins {
     id 'java'
 }
 
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
 
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}
 jar {
     manifest {
         attributes(
@@ -33,4 +42,8 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    def executableJar = tasks.named('jar', Jar)
+    dependsOn executableJar
+    inputs.file(executableJar.flatMap { it.archiveFile }).withPropertyName('executableJar')
+    systemProperty 'vrn.executableJar', executableJar.get().archiveFile.get().asFile.absolutePath
 }
