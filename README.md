@@ -22,6 +22,8 @@ From the VRN source directory in PowerShell:
 .\gradlew.bat clean build
 ```
 
+To run the test suite without cleaning first, use `.\gradlew.bat test`.
+
 The Java toolchain selects an installed JDK 21 for compilation and tests.
 Every Java compilation task also uses `--release 21` and UTF-8, restricting the
 language/API surface and producing Java 21 class files even when Gradle runs on
@@ -33,6 +35,10 @@ find your installed JDK 21, supply its actual installation path:
 ```powershell
 .\gradlew.bat "-Dorg.gradle.java.installations.paths=C:\Path\To\Your\JDK-21" clean build
 ```
+
+Without a matching JDK 21, Gradle fails with `Cannot find a Java installation`
+matching `languageVersion=21` and reports that toolchain auto-provisioning is not
+enabled. A newer JDK used to run Gradle does not replace the required JDK 21 toolchain.
 
 First use may download the pinned Gradle distribution and declared dependencies.
 With those already cached, use `--offline`. No additional packaging plugin is
@@ -68,6 +74,10 @@ java -jar $vrnJar --version
 
 If `java -version` selects another installation, invoke your Java 21 executable
 by its full path, for example `& 'C:\Path\To\JDK-21\bin\java.exe' -jar $vrnJar --help`.
+
+Java releases below 21 are unsupported and cannot load the application's Java 21
+class files (`UnsupportedClassVersionError`). Later compatible JVMs are permitted,
+but filesystem behavior is qualified on Java 21; see the limitations below.
 
 The logical command name is `vrn`; this build does not install a system-wide
 `vrn` launcher. Pass the following arguments after `java -jar $vrnJar`:
