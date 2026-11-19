@@ -65,6 +65,15 @@ final class WorkingTreePaths {
      * access errors, reparse entries and ambiguous component names are errors.
      */
     Path trackedFile(String stored) throws IOException {
+        return trackedFile(stored, true);
+    }
+
+    /** Single-file intent commands do not interpret directory/type replacements as deletions. */
+    Path selectedFile(String stored) throws IOException {
+        return trackedFile(stored, false);
+    }
+
+    private Path trackedFile(String stored, boolean allowReplacement) throws IOException {
         SnapshotManifestValidator.validatePath(stored);
         String[] parts = stored.split("/");
         Path parent = realRoot;
@@ -87,11 +96,17 @@ final class WorkingTreePaths {
             }
             Path actual = parent.resolve(candidates.getFirst());
             if (i == parts.length - 1) {
-                if (attributes.isDirectory()) return null;
+                if (attributes.isDirectory()) {
+                    if (!allowReplacement) throw new IOException("Select a single regular-file path, not a directory: " + stored);
+                    return null;
+                }
                 if (!attributes.isRegularFile()) throw new IOException("Unsupported tracked file type: " + requested);
                 return relative(actual, requested);
             }
-            if (!attributes.isDirectory()) return null;
+            if (!attributes.isDirectory()) {
+                if (!allowReplacement) throw new IOException("Unsupported file/directory replacement: " + stored);
+                return null;
+            }
             directory(actual);
             parent = directories.get(actual.toString());
         }

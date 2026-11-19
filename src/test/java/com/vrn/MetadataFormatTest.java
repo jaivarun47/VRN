@@ -108,7 +108,7 @@ class MetadataFormatTest {
             Files.writeString(snapshotFile, validSnapshot.replace("VRN-SNAPSHOT\t1", header));
             assertRejected(() -> snapshots.load(ID), "unsupported metadata type/version");
         }
-        for (String header : List.of("VRN-STAGING\t2", "VRN-SNAPSHOT\t1", "VRN-STAGING\tversion=2")) {
+        for (String header : List.of("VRN-STAGING\t3", "VRN-SNAPSHOT\t1", "VRN-STAGING\tversion=2")) {
             Files.writeString(indexFile, validIndex.replace("VRN-STAGING\t1", header));
             assertRejected(() -> new StagingArea(storage).readAll(), "unsupported metadata type/version");
         }

@@ -47,7 +47,7 @@ public final class CommitService {
             CommitRecovery recovery = new CommitRecovery(storage, files);
             recovery.recover();
             StagingArea staging = new StagingArea(storage, files);
-            Map<String, String> staged = staging.readAllLocked();
+            Map<String, StagedOperation> staged = staging.readOperationsLocked();
             if (staged.isEmpty()) {
                 throw new IllegalStateException("Nothing to commit. Stage files first with: vrn add <path>");
             }
@@ -58,7 +58,15 @@ public final class CommitService {
             if (!parentId.equals("NONE")) {
                 manifest.putAll(snapshots.load(parentId).files());
             }
-            manifest.putAll(staged);
+            for (var entry : staged.entrySet()) {
+                if (entry.getValue() instanceof StagedOperation.Delete && manifest.remove(entry.getKey()) == null) {
+                    throw new IllegalArgumentException("DELETE path is not tracked in HEAD: " + entry.getKey());
+                }
+            }
+            for (var entry : staged.entrySet()) {
+                if (entry.getValue() instanceof StagedOperation.Put put) manifest.put(entry.getKey(), put.contentHash());
+            }
+            SnapshotManifestValidator.validatePaths(manifest.keySet());
             // Verify the complete inherited-plus-staged candidate before publishing any new metadata.
             objects.verifyAll(manifest.values());
             String id = UUID.randomUUID().toString().replace("-", "");

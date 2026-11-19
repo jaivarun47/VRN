@@ -33,6 +33,9 @@ public class WorkingTreeStatus {
     /** Files in staging with a different hash than HEAD — will update on next commit. */
     public final List<String> stagedModifications;
 
+    /** Paths explicitly selected for absence in the next snapshot. */
+    public final List<String> stagedDeletions;
+
     /**
      * Files tracked (in HEAD or staging) whose on-disk content differs from
      * the staged hash (if staged) or the committed hash (if not staged).
@@ -46,18 +49,20 @@ public class WorkingTreeStatus {
      */
     public final List<String> deleted;
 
-    /** On-disk files that are neither staged nor in HEAD. */
+    /** Newly discovered files and retained working files whose staged selection is DELETE. */
     public final List<String> untracked;
 
     private WorkingTreeStatus(
             List<String> stagedNewFiles,
             List<String> stagedModifications,
+            List<String> stagedDeletions,
             List<String> modifiedNotStaged,
             List<String> deleted,
             List<String> untracked
     ) {
         this.stagedNewFiles      = Collections.unmodifiableList(stagedNewFiles);
         this.stagedModifications = Collections.unmodifiableList(stagedModifications);
+        this.stagedDeletions     = Collections.unmodifiableList(stagedDeletions);
         this.modifiedNotStaged   = Collections.unmodifiableList(modifiedNotStaged);
         this.deleted             = Collections.unmodifiableList(deleted);
         this.untracked           = Collections.unmodifiableList(untracked);
@@ -67,6 +72,7 @@ public class WorkingTreeStatus {
     public boolean isClean() {
         return stagedNewFiles.isEmpty()
                 && stagedModifications.isEmpty()
+                && stagedDeletions.isEmpty()
                 && modifiedNotStaged.isEmpty()
                 && deleted.isEmpty()
                 && untracked.isEmpty();
@@ -104,7 +110,7 @@ public class WorkingTreeStatus {
             destinations.put(stored, destination);
             if (actual != null) workingPaths.put(destination, actual);
         }
-        Map<String, String> staged = byDestination(captured.staged(), destinations);
+        Map<String, StagedOperation> staged = byDestination(captured.staged(), destinations);
         Map<String, String> committed = byDestination(captured.committed(), destinations);
         Map<String, String> display = new HashMap<>();
         captured.committed().keySet().forEach(path -> display.put(destinations.get(path), path));
@@ -130,6 +136,7 @@ public class WorkingTreeStatus {
         // Classify paths.
         List<String> stagedNew   = new ArrayList<>();
         List<String> stagedMod   = new ArrayList<>();
+        List<String> stagedDel   = new ArrayList<>();
         List<String> modUnstaged = new ArrayList<>();
         List<String> deleted     = new ArrayList<>();
         List<String> untracked   = new ArrayList<>();
@@ -144,8 +151,15 @@ public class WorkingTreeStatus {
             boolean inCommitted = committed.containsKey(path);
             boolean onDisk      = workingDir.containsKey(path);
 
+            if (staged.get(path) instanceof StagedOperation.Delete) {
+                stagedDel.add(display.get(path));
+                // Selected absence differs from any present working file, even if ignored.
+                if (onDisk) untracked.add(path);
+                continue;
+            }
+
             if (inStaging) {
-                String stagedHash = staged.get(path);
+                String stagedHash = ((StagedOperation.Put) staged.get(path)).contentHash();
 
                 // ── Staged category ──────────────────────────────────────
                 if (!inCommitted) {
@@ -155,7 +169,7 @@ public class WorkingTreeStatus {
                 }
             }
             // The selected content is I when present, otherwise H. Absence is independent.
-            String selected = inStaging ? staged.get(path) : committed.get(path);
+            String selected = inStaging ? ((StagedOperation.Put) staged.get(path)).contentHash() : committed.get(path);
             if (!onDisk) deleted.add(display.get(path));
             else if (!workingDir.get(path).equals(selected)) modUnstaged.add(path);
         }
@@ -169,11 +183,12 @@ public class WorkingTreeStatus {
 
         Collections.sort(stagedNew);
         Collections.sort(stagedMod);
+        Collections.sort(stagedDel);
         Collections.sort(modUnstaged);
         Collections.sort(deleted);
         Collections.sort(untracked);
 
-        return new WorkingTreeStatus(stagedNew, stagedMod, modUnstaged, deleted, untracked);
+        return new WorkingTreeStatus(stagedNew, stagedMod, stagedDel, modUnstaged, deleted, untracked);
     }
 
     // ------------------------------------------------------------------
@@ -188,14 +203,19 @@ public class WorkingTreeStatus {
         try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(storage)) {
             RepositoryLayout.validate(storage);
             String head = new MetadataPaths(storage).readString("HEAD").strip();
-            Map<String, String> staged = new StagingArea(storage).readAllLocked();
+            Map<String, StagedOperation> staged = new StagingArea(storage).readOperationsLocked();
             Map<String, String> committed = head.equals("NONE") ? Map.of() : new SnapshotStore(storage).load(head).files();
+            for (var entry : staged.entrySet()) {
+                if (entry.getValue() instanceof StagedOperation.Delete && !committed.containsKey(entry.getKey())) {
+                    throw new IOException("DELETE path is not tracked in HEAD: " + entry.getKey());
+                }
+            }
             return new Metadata(head, Map.copyOf(staged), Map.copyOf(committed));
         }
     }
 
-    private static Map<String, String> byDestination(Map<String, String> entries, Map<String, String> destinations) throws IOException {
-        Map<String, String> result = new HashMap<>();
+    private static <T> Map<String, T> byDestination(Map<String, T> entries, Map<String, String> destinations) throws IOException {
+        Map<String, T> result = new HashMap<>();
         for (var entry : entries.entrySet()) {
             String destination = destinations.get(entry.getKey());
             if (result.put(destination, entry.getValue()) != null) {
@@ -207,5 +227,5 @@ public class WorkingTreeStatus {
 
     private static String canonical(Path relative) { return relative.toString().replace('\\', '/'); }
 
-    private record Metadata(String head, Map<String, String> staged, Map<String, String> committed) {}
+    private record Metadata(String head, Map<String, StagedOperation> staged, Map<String, String> committed) {}
 }

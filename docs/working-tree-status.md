@@ -1,10 +1,14 @@
 # Working-tree status and identity — Task 7B
 
+Task 8A extends this contract with typed staging intent; see
+[staging-intent.md](staging-intent.md). The later verification/scope sections record
+the historical Task 7B implementation.
+
 ## Content comparison contract
 
 Status compares the captured HEAD manifest (H), effective pending index (I), and
-working regular files (W). The index still selects additions/modifications only;
-no deletion marker or new persisted operation is introduced.
+working regular files (W). The index selects PUT contents or DELETE absence;
+no operation means inheritance from HEAD.
 
 For each supported destination:
 
@@ -13,6 +17,9 @@ For each supported destination:
    modification or deletion. Missing staged additions can therefore have both a
    staged addition and a working deletion.
 3. Report W files absent from both H and I as untracked, subject to ignore rules.
+4. DELETE reports a staged deletion. A present working file is additionally untracked
+   relative to selected absence, regardless of ignore rules; an absent file has no
+   additional working deletion. This classification never changes the index.
 
 `-` below means no entry/file, not a stored hash. A/B/C are distinct contents.
 
@@ -31,9 +38,12 @@ For each supported destination:
 | A | B | C | Staged modification + working modification |
 | A | B | - | Staged modification + working deletion |
 | A | B | A | Staged modification + working modification (disk reverted to H) |
+| A | DELETE | - | Staged deletion |
+| A | DELETE | B | Staged deletion + untracked retained file |
 
-The existing five result lists and CLI sections are retained. `deleted` now
-includes missing HEAD **or staged** regular files, independently of staged content.
+Task 8A adds immutable `stagedDeletions` to the original five result lists. `deleted`
+includes missing HEAD **or staged PUT** regular files, independently of staged content,
+except paths selected for DELETE.
 A file replaced by a directory, or a former parent directory replaced by a file,
 means the old regular-file destination is absent; new eligible files are displayed
 separately. This does not make replacement commits supported.

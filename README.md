@@ -86,7 +86,9 @@ The logical command name is `vrn`; this build does not install a system-wide
 |---|---|
 | `init` | Initialize manual storage in the current project directory; validate and preserve an existing repository. |
 | `add <path>` | Capture one file or recursively stage a directory's eligible files. Use `add .` for the current tree. |
-| `commit -m "message"` | Save staged content plus inherited files as a new snapshot. `--message` is also accepted. |
+| `stage-delete <path>` | Select one tracked file for removal from the next snapshot; preserve its working file. |
+| `unstage <path>` | Remove one PUT or DELETE selection; preserve working files and history. |
+| `commit -m "message"` | Apply staged PUT/DELETE selections to inherited files and publish a new snapshot. `--message` is also accepted. |
 | `status` | Compare HEAD, staged selections, and working files; report staged, unstaged, deleted, and untracked files. |
 
 Root `--help`/`-h` and `--version`/`-V` are supported. Subcommand help flags are
@@ -112,6 +114,23 @@ Staging captures the selected bytes: edits made afterward remain unstaged.
 Once all current eligible files are committed without further changes, status
 reports a clean working directory.
 
+Deletion is explicit and selects only the next snapshot:
+
+```powershell
+java -jar $vrnJar stage-delete src\OldFeature.java
+java -jar $vrnJar status
+java -jar $vrnJar unstage src\OldFeature.java  # Cancel that selection
+```
+
+`stage-delete` accepts a tracked file whether present or already missing. It never
+removes working files or old snapshots/objects. A retained file appears as untracked
+alongside its staged deletion; an absent file is not also an unstaged deletion.
+For a staged-only addition, it cancels that PUT instead. Repeated deletion selection
+is idempotent; unknown deletions fail. Unstaging an unselected valid file path is a
+no-op. Both commands select one repository-relative file; when absent, use its exact
+stored spelling. `add` can replace DELETE with PUT, but missing files and `add .`
+never automatically select deletions. See [staging intent](docs/staging-intent.md).
+
 Manual state lives in `.vrn/`: raw SHA-256 content objects, full snapshot
 manifests, staging, configuration, and HEAD. HEAD identifies the active snapshot.
 Required objects are verified before a new snapshot becomes active. Publication
@@ -126,8 +145,9 @@ staged files remain visible to status even when ignored. Root `.vrn/` and
 
 ## Current limitations
 
-- **Deletion staging and unstaging are not implemented.** Status reports working
-  deletions, but committing cannot remove inherited paths.
+- Deletion/unstaging selection is single-file only; no recursive, wildcard, or
+  multi-path selection is provided. Empty staging cannot commit. Explicit unchanged
+  PUTs retain the existing behavior of allowing an identical-content snapshot.
 - **History/log and restore commands are not available.** Saved objects and
   manifests do not yet provide a supported restoration workflow.
 - **Automatic versioning is not implemented.** `.vrnauto/` is reserved/protected;

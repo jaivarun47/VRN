@@ -30,7 +30,7 @@ public final class RepositoryLayout {
             }
 
             try {
-                SnapshotManifestValidator.validatePaths(MetadataCodec.decodeIndex(paths.readLines("staging/index")).keySet());
+                SnapshotManifestValidator.validatePaths(MetadataCodec.decodeOperations(paths.readLines("staging/index")).keySet());
             } catch (NoSuchFileException absentIndex) { /* An index is optional. */ }
             // Inspection only; an absent record is handled by the recovery reader, without mutation.
             new CommitRecovery(storage, new AtomicFilePublisher()).hasConsumedIndex();

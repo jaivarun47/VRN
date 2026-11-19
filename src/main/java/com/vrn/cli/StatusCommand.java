@@ -21,16 +21,14 @@ import java.util.concurrent.Callable;
  *   <li><b>Staged new file</b>       – in staging, NOT in HEAD snapshot</li>
  *   <li><b>Staged modification</b>   – in staging AND in HEAD, hashes differ</li>
  *   <li><b>Modified (not staged)</b> – tracked file changed on disk but not staged</li>
- *   <li><b>Deleted</b>               – committed or staged regular file absent from disk</li>
- *   <li><b>Untracked</b>             – on disk, not ignored, not staged, not committed</li>
+ *   <li><b>Staged deletion</b>       – selected absence in the next snapshot</li>
+ *   <li><b>Deleted</b>               – selected content absent from disk, without a staged DELETE</li>
+ *   <li><b>Untracked</b>             – newly discovered files, or retained files selected for deletion</li>
  *   <li><b>Nothing to commit</b>     – none of the above</li>
  * </ul>
  *
- * <h2>Deletion limitation</h2>
- * The staging index only records additions and modifications ({@code path=hash}).
- * There is no operation to select a deletion for commit. A missing committed or
- * staged file is reported as "deleted (not staged)", independently of its staged
- * addition/modification. Status does not remove the staged entry or change history.
+ * <p>DELETE selects absence. A retained working file is also untracked relative to
+ * that selection; an absent file is not double-counted as an unstaged deletion.
  */
 @Command(
         name = "status",
@@ -71,10 +69,11 @@ public class StatusCommand implements Callable<Integer> {
             return;
         }
 
-        if (!status.stagedNewFiles.isEmpty() || !status.stagedModifications.isEmpty()) {
+        if (!status.stagedNewFiles.isEmpty() || !status.stagedModifications.isEmpty() || !status.stagedDeletions.isEmpty()) {
             System.out.println("Changes staged for commit:");
             for (String p : status.stagedNewFiles)      System.out.println("  new file:     " + p);
             for (String p : status.stagedModifications) System.out.println("  modified:     " + p);
+            for (String p : status.stagedDeletions)     System.out.println("  deleted:      " + p);
             System.out.println();
         }
 
