@@ -52,13 +52,17 @@ public class WorkingTreeStatus {
     /** Newly discovered files and retained working files whose staged selection is DELETE. */
     public final List<String> untracked;
 
+    /** Unsupported working filename changes or existing staged spelling transitions. */
+    public final List<String> caseOnlyChanges;
+
     private WorkingTreeStatus(
             List<String> stagedNewFiles,
             List<String> stagedModifications,
             List<String> stagedDeletions,
             List<String> modifiedNotStaged,
             List<String> deleted,
-            List<String> untracked
+            List<String> untracked,
+            List<String> caseOnlyChanges
     ) {
         this.stagedNewFiles      = Collections.unmodifiableList(stagedNewFiles);
         this.stagedModifications = Collections.unmodifiableList(stagedModifications);
@@ -66,6 +70,7 @@ public class WorkingTreeStatus {
         this.modifiedNotStaged   = Collections.unmodifiableList(modifiedNotStaged);
         this.deleted             = Collections.unmodifiableList(deleted);
         this.untracked           = Collections.unmodifiableList(untracked);
+        this.caseOnlyChanges     = Collections.unmodifiableList(caseOnlyChanges);
     }
 
     /** Returns {@code true} when there are no changes of any kind. */
@@ -75,7 +80,8 @@ public class WorkingTreeStatus {
                 && stagedDeletions.isEmpty()
                 && modifiedNotStaged.isEmpty()
                 && deleted.isEmpty()
-                && untracked.isEmpty();
+                && untracked.isEmpty()
+                && caseOnlyChanges.isEmpty();
     }
 
     // ------------------------------------------------------------------
@@ -104,11 +110,22 @@ public class WorkingTreeStatus {
         storedPaths.addAll(captured.staged().keySet());
         Map<String, String> destinations = new HashMap<>();
         Map<String, Path> workingPaths = new HashMap<>();
+        Set<String> caseChanges = new TreeSet<>();
         for (String stored : storedPaths) {
             Path actual = identity.trackedFile(stored);
             String destination = actual == null ? stored : canonical(actual);
             destinations.put(stored, destination);
             if (actual != null) workingPaths.put(destination, actual);
+            if (actual != null && !(captured.staged().get(stored) instanceof StagedOperation.Delete)
+                    && CaseOnlyPaths.fileNameChanged(stored, destination)) {
+                caseChanges.add("working filename: " + stored + " -> " + destination);
+            }
+        }
+        for (var entry : captured.staged().entrySet()) {
+            if (entry.getValue() instanceof StagedOperation.Put) {
+                String alternate = CaseOnlyPaths.alternateSpelling(entry.getKey(), captured.committed().keySet());
+                if (alternate != null) caseChanges.add("staged path: " + alternate + " -> " + entry.getKey());
+            }
         }
         Map<String, StagedOperation> staged = byDestination(captured.staged(), destinations);
         Map<String, String> committed = byDestination(captured.committed(), destinations);
@@ -188,7 +205,7 @@ public class WorkingTreeStatus {
         Collections.sort(deleted);
         Collections.sort(untracked);
 
-        return new WorkingTreeStatus(stagedNew, stagedMod, stagedDel, modUnstaged, deleted, untracked);
+        return new WorkingTreeStatus(stagedNew, stagedMod, stagedDel, modUnstaged, deleted, untracked, new ArrayList<>(caseChanges));
     }
 
     // ------------------------------------------------------------------

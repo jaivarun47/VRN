@@ -28,6 +28,8 @@ class WindowsStatusIdentityTest {
         var s=WorkingTreeStatus.compute(root);
         assertTrue(s.deleted.isEmpty()); assertTrue(s.untracked.isEmpty());
         assertEquals(modified?List.of("main.java"):List.of(),s.modifiedNotStaged);
+        assertFalse(s.caseOnlyChanges.isEmpty());
+        assertFalse(s.isClean());
         assertEquals(before,RepositoryPreflightTest.tree(root.resolve(".vrn")));
     }
 
@@ -48,7 +50,9 @@ class WindowsStatusIdentityTest {
     @Test void stagedAlternateSpellingIsReconciledByExistingDestinationWithoutRewritingMetadata() throws Exception {
         StatusCorrectnessTest.prepare(root,"Main.java","A","-","A",".vrn/\n");
         rename(root.resolve("Main.java"),root.resolve("main.java"));
-        new StagingArea(root.resolve(".vrn")).stage(Path.of("main.java"),StatusCorrectnessTest.digest("B"));
+        // Pre-MT-003 indexes remain inspectable; new PUT writers must reject this transition.
+        assertThrows(IOException.class, () -> new StagingArea(root.resolve(".vrn")).stage(Path.of("main.java"),StatusCorrectnessTest.digest("B")));
+        Files.writeString(root.resolve(".vrn/staging/index"), MetadataCodec.encodeIndex(Map.of("main.java",StatusCorrectnessTest.digest("B"))));
         Files.writeString(root.resolve("main.java"),"C");
         var before=RepositoryPreflightTest.tree(root.resolve(".vrn"));
         var status=WorkingTreeStatus.compute(root);
@@ -56,6 +60,7 @@ class WindowsStatusIdentityTest {
         assertTrue(status.stagedNewFiles.isEmpty());
         assertEquals(List.of("main.java"),status.modifiedNotStaged);
         assertTrue(status.deleted.isEmpty()); assertTrue(status.untracked.isEmpty());
+        assertFalse(status.caseOnlyChanges.isEmpty());
         assertEquals(before,RepositoryPreflightTest.tree(root.resolve(".vrn")));
     }
 
@@ -110,7 +115,9 @@ class WindowsStatusIdentityTest {
 
     @Test void absentAlternateSelectionSpellingsAreExplicitlyUnresolved() throws Exception {
         StatusCorrectnessTest.prepare(root,"Main.java","A","-","-",".vrn/\n");
-        new StagingArea(root.resolve(".vrn")).stage(Path.of("main.java"),StatusCorrectnessTest.digest("B"));
+        // Exercise the old persisted shape rather than asking the corrected writer to create it.
+        assertThrows(IOException.class, () -> new StagingArea(root.resolve(".vrn")).stage(Path.of("main.java"),StatusCorrectnessTest.digest("B")));
+        Files.writeString(root.resolve(".vrn/staging/index"), MetadataCodec.encodeIndex(Map.of("main.java",StatusCorrectnessTest.digest("B"))));
         var before=RepositoryPreflightTest.tree(root.resolve(".vrn"));
         IOException error=assertThrows(IOException.class,()->WorkingTreeStatus.compute(root));
         assertTrue(error.getMessage().contains("VRN support limitation"),error.getMessage());

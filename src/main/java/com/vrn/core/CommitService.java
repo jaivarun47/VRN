@@ -59,6 +59,12 @@ public final class CommitService {
                 manifest.putAll(snapshots.load(parentId).files());
             }
             for (var entry : staged.entrySet()) {
+                if (entry.getValue() instanceof StagedOperation.Put) {
+                    CaseOnlyPaths.requirePut(storage.toAbsolutePath().normalize().getParent(), entry.getKey(),
+                            manifest.keySet(), staged.keySet());
+                }
+            }
+            for (var entry : staged.entrySet()) {
                 if (entry.getValue() instanceof StagedOperation.Delete && manifest.remove(entry.getKey()) == null) {
                     throw new IllegalArgumentException("DELETE path is not tracked in HEAD: " + entry.getKey());
                 }

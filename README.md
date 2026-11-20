@@ -143,6 +143,13 @@ semantics are not implemented. Missing rules mean no user filtering. Tracked and
 staged files remain visible to status even when ignored. Root `.vrn/` and
 `.vrnauto/` are protected independently of ignore rules.
 
+Files already in HEAD or staging remain eligible for `add`, including directory
+selections, even when ignored. Explicitly adding an ignored untracked file fails
+with an explanatory message and exit code 1, preserving staging. Directory adds
+skip ignored untracked files; an empty eligible selection reports `No eligible
+files` and returns 0 without changing staging. See the
+[add/ignore investigation](docs/add-ignore-investigation.md).
+
 ## Current limitations
 
 - Deletion/unstaging selection is single-file only; no recursive, wildcard, or
@@ -153,8 +160,11 @@ staged files remain visible to status even when ignored. Root `.vrn/` and
 - **Automatic versioning is not implemented.** `.vrnauto/` is reserved/protected;
   no daemon, monitoring, independent automatic history, or retention exists.
 - File/directory replacement commits and complete case-only rename commits are
-  unsupported. Status can reconcile supported casing changes without rewriting
-  stored spelling.
+  unsupported. Status explicitly reports unsupported filename-case changes;
+  affected PUTs are rejected by add/commit until the recorded filename spelling is
+  restored and any conflicting selection is unstaged. Parent-directory lookup
+  aliases preserve recorded spelling. See the
+  [case-only path policy](docs/case-only-path-policy.md).
 - Symbolic links, junctions, and other observable reparse entries have limited
   support and can be rejected. Ambiguous case-sensitive destinations are outside
   the current identity model. External filesystem races remain possible.

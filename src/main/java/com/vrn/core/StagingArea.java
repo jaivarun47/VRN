@@ -28,6 +28,8 @@ public class StagingArea {
         try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(storage)) {
             new CommitRecovery(storage, files).recover();
             Map<String, StagedOperation> entries = readOperationsLocked();
+            CaseOnlyPaths.requirePut(storage.toAbsolutePath().normalize().getParent(), relativePath,
+                    headFiles().keySet(), entries.keySet());
             List<String> deletions = entries.entrySet().stream()
                     .filter(entry -> entry.getValue() instanceof StagedOperation.Delete).map(Map.Entry::getKey).toList();
             if (!deletions.isEmpty()) {

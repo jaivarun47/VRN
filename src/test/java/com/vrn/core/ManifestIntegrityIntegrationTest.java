@@ -86,7 +86,12 @@ class ManifestIntegrityIntegrationTest {
         staging.stage(Path.of(first), hash);
         byte[] before = Files.readAllBytes(index);
 
-        assertThrows(IllegalArgumentException.class, () -> staging.stage(Path.of(second), hash));
+        if (first.equalsIgnoreCase(second)) {
+            IOException error = assertThrows(IOException.class, () -> staging.stage(Path.of(second), hash));
+            assertTrue(error.getMessage().contains("Case-only"));
+        } else {
+            assertThrows(IllegalArgumentException.class, () -> staging.stage(Path.of(second), hash));
+        }
 
         assertArrayEquals(before, Files.readAllBytes(index));
         assertEquals(Map.of(first, hash), staging.readAll());
@@ -98,7 +103,14 @@ class ManifestIntegrityIntegrationTest {
     void inheritedAndStagedConflicts_cannotPublishOrAdvanceHead(String inherited, String stagedPath) throws Exception {
         String parent = commitParent(inherited);
         StagingArea staging = new StagingArea(storage);
-        staging.stage(Path.of(stagedPath), hash);
+        boolean caseAlias = inherited.equalsIgnoreCase(stagedPath);
+        if (caseAlias) {
+            assertThrows(IOException.class, () -> staging.stage(Path.of(stagedPath), hash));
+            // Older binaries could persist this individually valid, uncommittable selection.
+            Files.writeString(index, MetadataCodec.encodeIndex(Map.of(stagedPath, hash)));
+        } else {
+            staging.stage(Path.of(stagedPath), hash);
+        }
         byte[] before = Files.readAllBytes(index);
         byte[] previousSnapshot = Files.readAllBytes(snapshotPath(parent));
         AtomicFilePublisher noPublication = new AtomicFilePublisher() {
@@ -108,8 +120,9 @@ class ManifestIntegrityIntegrationTest {
             }
         };
 
-        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-                () -> new CommitService(storage, noPublication).commit("must be rejected"));
+        Exception error = caseAlias
+                ? assertThrows(IOException.class, () -> new CommitService(storage, noPublication).commit("must be rejected"))
+                : assertThrows(IllegalArgumentException.class, () -> new CommitService(storage, noPublication).commit("must be rejected"));
 
         assertTrue(error.getMessage().contains(inherited), error.getMessage());
         assertTrue(error.getMessage().contains(stagedPath), error.getMessage());
@@ -173,8 +186,9 @@ class ManifestIntegrityIntegrationTest {
         String raw = MetadataCodec.encodeSnapshot(new Snapshot("bad-parent", "NONE", 1, "unsafe",
                 Map.of("node", hash, "node/child", hash)));
         Files.writeString(snapshotPath("bad-parent"), raw);
-        Files.writeString(head, "bad-parent");
+        // Select valid content first; PUT validation now reads HEAD and rejects a corrupt active manifest.
         new StagingArea(storage).stage(Path.of("pending.txt"), hash);
+        Files.writeString(head, "bad-parent");
         byte[] before = Files.readAllBytes(index);
 
         assertThrows(IllegalArgumentException.class, () -> new CommitService(storage).commit("invalid inherited state"));

@@ -38,7 +38,7 @@ class WindowsStagingIntentTest {
         new CommitService(storage).commit("parent");
     }
 
-    @Test void existingCaseAliasesSelectStoredDestinationAndPutCanReplaceDeleteWithoutRenamingHistory() throws Exception {
+    @Test void existingAliasesSelectDeletionButPutRequiresRestoringRecordedFilenameCase() throws Exception {
         WindowsStatusIdentityTest.rename(root.resolve("Src/Main.java"), root.resolve("Src/main.java"));
         WindowsStatusIdentityTest.rename(root.resolve("Src"), root.resolve("src"));
         staging.stageDelete(Path.of("src/main.java"));
@@ -47,11 +47,14 @@ class WindowsStagingIntentTest {
                 .filter(path -> !path.equals(".vrnignore")).toList());
         assertTrue(staging.unstage(Path.of("SRC/MAIN.JAVA")));
         staging.stageDelete(Path.of("src/main.java"));
-        staging.stage(Path.of("src/main.java"), hash);
+        assertThrows(IOException.class, () -> staging.stage(Path.of("src/main.java"), hash));
+        assertEquals(Map.of("Src/Main.java", new StagedOperation.Delete()), staging.readOperations());
+        WindowsStatusIdentityTest.rename(root.resolve("src/main.java"), root.resolve("src/Main.java"));
+        staging.stage(Path.of("Src/Main.java"), hash);
         assertEquals(Map.of("Src/Main.java", new StagedOperation.Put(hash)), staging.readOperations());
         String next = new CommitService(storage).commit("restore content selection").snapshotId();
         assertEquals(Map.of("Src/Main.java", hash), new SnapshotStore(storage).load(next).files());
-        assertTrue(Files.exists(root.resolve("src/main.java")));
+        assertTrue(Files.exists(root.resolve("src/Main.java")));
     }
 
     @Test void missingSelectionsUseExactStoredSpellingInsteadOfGuessingCaseIdentity() throws Exception {

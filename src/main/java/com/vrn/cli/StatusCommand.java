@@ -89,5 +89,12 @@ public class StatusCommand implements Callable<Integer> {
             for (String p : status.untracked) System.out.println("  " + p);
             System.out.println();
         }
+
+        if (!status.caseOnlyChanges.isEmpty()) {
+            System.out.println("Unsupported case-only path changes:");
+            for (String change : status.caseOnlyChanges) System.out.println("  " + change);
+            System.out.println("Case-only rename commits are not supported. Restore recorded filename spelling before add/commit;"
+                    + " use unstage to remove a conflicting selection.");
+        }
     }
 }

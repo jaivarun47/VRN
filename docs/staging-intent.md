@@ -1,5 +1,8 @@
 # Staging intent — Task 8A
 
+MT-003 tightens case-only PUT handling; see [case-only-path-policy.md](case-only-path-policy.md).
+The verification checkpoint below records the historical Task 8A completion.
+
 The manual index is a current selection, not a command log. A path has PUT(hash),
 DELETE, or no operation. Absence inherits from HEAD; it is not a persisted record.
 `StagedOperation` is a sealed Java type with separate `Put` and `Delete` records.
@@ -37,7 +40,9 @@ internal storage, unsupported links/reparse entries and ambiguous identities fai
 Existing case aliases require successful filesystem lookup and actual spelling
 agreement. Missing selections use exact stored spelling rather than guessing case
 identity. Hard-linked names remain independent destinations. Replacing a staged
-DELETE with PUT retains the stored tracked spelling, not a case-only rename.
+DELETE with PUT requires the working filename to retain the recorded filename
+case. Case-only filename transitions are rejected rather than silently keeping
+the old spelling. DELETE and unstage still accept proven lookup aliases.
 
 ## Status and commit
 

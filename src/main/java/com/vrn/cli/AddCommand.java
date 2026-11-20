@@ -4,8 +4,6 @@ import com.vrn.core.FileScanner;
 import com.vrn.core.ObjectStore;
 import com.vrn.core.ScannedFile;
 import com.vrn.core.StagingArea;
-import com.vrn.core.RepositoryLayout;
-import com.vrn.core.RepositoryMutationGuard;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
@@ -37,17 +35,18 @@ public class AddCommand implements Callable<Integer> {
                 return 1;
             }
 
-            try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(projectRoot.resolve(".vrn"))) {
-                RepositoryLayout.validate(projectRoot.resolve(".vrn"));
-            }
-
             FileScanner scanner = new FileScanner();
             ObjectStore objectStore =
                     new ObjectStore(projectRoot.resolve(".vrn"));
             StagingArea stagingArea =
                     new StagingArea(projectRoot.resolve(".vrn"));
 
-            List<ScannedFile> files = scanner.scan(projectRoot, path);
+            List<ScannedFile> files = scanner.scanForAdd(projectRoot, path);
+
+            if (files.isEmpty()) {
+                System.out.println("No eligible files to stage; the directory is empty or its untracked files match ignore rules.");
+                return 0;
+            }
 
             for (ScannedFile file : files) {
                 // Pass the already-read bytes so the file is not read twice.

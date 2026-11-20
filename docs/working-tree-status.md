@@ -3,6 +3,8 @@
 Task 8A extends this contract with typed staging intent; see
 [staging-intent.md](staging-intent.md). The later verification/scope sections record
 the historical Task 7B implementation.
+MT-003 additionally reports unsupported filename-case changes; see
+[case-only-path-policy.md](case-only-path-policy.md).
 
 ## Content comparison contract
 
@@ -113,9 +115,14 @@ The conservative support boundary remains important:
 
 This is status interpretation of supported regular-file destinations, not full
 case-distinct NTFS support or an exact emulation of all native Unicode case tables.
-Case-only rename staging/commit semantics remain deferred. A content-clean status
-does not promise that an independently staged spelling transition can be committed;
-the unchanged commit manifest validator can still reject the merged spellings.
+Full case-only rename staging/commit semantics remain deferred. MT-003 adds an
+immutable `caseOnlyChanges` list for observed terminal-filename case changes and
+preexisting staged spelling transitions. These prevent `isClean()` and appear in
+an explicit unsupported-changes CLI section, independently of content hashes.
+Existing content classifications remain intact without false deleted/untracked
+pairs. New conflicting PUTs and affected PUT commits fail explicitly. Parent-only
+lookup aliases retain their existing content-resolution semantics and do not record
+directory renames; add preserves the exact known metadata spelling after lookup.
 Stored object integrity is likewise not certified by a clean status.
 
 ## Metadata and scan consistency
