@@ -13,7 +13,11 @@ import java.util.Set;
 
 public class FileScanner {
 
-    private final FileHasher hasher = new FileHasher();
+    private final FileHasher hasher;
+
+    public FileScanner() { this(new FileHasher()); }
+
+    FileScanner(FileHasher hasher) { this.hasher = hasher; }
 
     public List<ScannedFile> scan(Path projectRoot, Path targetPath)
             throws Exception {
@@ -24,7 +28,8 @@ public class FileScanner {
 
     /**
      * Add's ignore rules filter untracked discovery, not existing HEAD/index selections.
-     * Capture membership coherently, then scan unlocked; this is not batch publication.
+     * Compatibility capture returning bytes. AddService uses metadata-only selection
+     * followed by streaming object capture under its operation guard.
      */
     public List<ScannedFile> scanForAdd(Path projectRoot, Path targetPath) throws Exception {
         Path root = projectRoot.toAbsolutePath().normalize();
@@ -35,8 +40,20 @@ public class FileScanner {
             String head = new MetadataPaths(storage).readString("HEAD").strip();
             if (!head.equals("NONE")) known.addAll(new SnapshotStore(storage).load(head).files().keySet());
             known.addAll(new StagingArea(storage).readOperationsLocked().keySet());
+            return scanForAddLocked(root, targetPath, known);
         }
+    }
 
+    /** Caller holds the repository guard and supplies the post-recovery HEAD/index membership. */
+    List<ScannedFile> scanForAddLocked(Path root, Path targetPath, Set<String> known) throws Exception {
+        var selected = selectForAddLocked(root, targetPath, known);
+        Map<String, Path> recorded = new LinkedHashMap<>();
+        for (var file : selected) recorded.put(canonical(file.source()), file.path());
+        return readFiles(root, selected.stream().map(SelectedFile::source).toList(), recorded);
+    }
+
+    /** Metadata-only discovery for streaming add; never retains file contents. */
+    List<SelectedFile> selectForAddLocked(Path root, Path targetPath, Set<String> known) throws Exception {
         Map<String, Path> selected = new LinkedHashMap<>();
         Map<String, Path> recorded = new LinkedHashMap<>();
         // Retain all existing traversal, containment and mandatory internal-directory checks.
@@ -71,7 +88,13 @@ public class FileScanner {
             // A regular file omitted by discovery and not matched to known intent was ignored.
             throw new IllegalArgumentException("Ignored untracked file: " + targetPath + "; no files were staged.");
         }
-        return readFiles(root, List.copyOf(selected.values()), recorded);
+        SnapshotManifestValidator.validatePaths(selected.keySet());
+        List<SelectedFile> result = new ArrayList<>();
+        for (var entry : selected.entrySet()) {
+            result.add(new SelectedFile(entry.getValue(), recorded.getOrDefault(entry.getKey(), entry.getValue()),
+                    ContentCapture.observe(root, entry.getValue())));
+        }
+        return List.copyOf(result);
     }
 
     private List<ScannedFile> readFiles(Path root, List<Path> paths) throws Exception {
@@ -84,7 +107,12 @@ public class FileScanner {
                 .map(path -> path.toString().replace('\\', '/')).toList());
         for (Path path : paths) {
             // Read the file exactly once: get both hash and bytes.
-            FileHasher.HashedFile hf = hasher.hashWithBytes(root.resolve(path));
+            new WorkingTreePaths(root).file(root.resolve(path));
+            FileHasher.HashedFile hf;
+            try { hf = hasher.hashWithBytes(root.resolve(path)); }
+            catch (Exception failure) {
+                throw new java.io.IOException("Could not capture selected file '" + canonical(path) + "': " + failure.getMessage(), failure);
+            }
             result.add(new ScannedFile(recorded.getOrDefault(canonical(path), path), hf.hash(), hf.bytes()));
         }
         return List.copyOf(result);

@@ -1,5 +1,10 @@
 # Content-object integrity (Task 6B)
 
+Task 8C adds [bounded-memory object capture](bounded-memory-capture.md) for CLI add.
+The byte-array storage API remains available for existing callers; streamed object
+publication uses a verified same-directory temporary file and create-new hard
+link, so an existing digest destination cannot be overwritten by a collision.
+
 ## Scope and identifiers
 
 Object access uses the existing flat `objects/<id>` layout and raw file contents.
@@ -66,9 +71,10 @@ whole-file memory copy. Callers must publish any derived output only after readi
 successfully to EOF. Partial reads or hostile concurrent edits are not an immutable
 filesystem snapshot guarantee.
 
-Existing scanning/staging still retains file byte arrays; that older memory issue
-is not solved by this task. Incoming write validation hashes an already supplied
-array, followed by one streaming verification of the new or reused on-disk object.
+At Task 6B's checkpoint, scanning/staging retained file byte arrays. Task 8C removes
+that retention from CLI add and streams status hashing. Compatibility helpers that
+explicitly return bytes still buffer them. Byte-array write validation continues
+to hash the supplied array and stream-verify the new or reused on-disk object.
 
 ## Metadata inspection versus content trust
 

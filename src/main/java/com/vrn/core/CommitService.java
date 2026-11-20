@@ -8,8 +8,8 @@ import java.util.UUID;
 
 /**
  * Manual staged-commit operation against explicitly supplied repository storage.
- * Cooperating writers are serialized; source-file edits and whole multi-file add
- * operations are not frozen. Unreachable manifests are retained for later inspection.
+ * Cooperating mutations (including complete add batches) are serialized; source-file
+ * edits are not frozen. Unreachable manifests are retained for later inspection.
  */
 public final class CommitService {
 

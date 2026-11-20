@@ -55,4 +55,13 @@ public class AtomicFilePublisher {
     public void delete(Path path) throws IOException {
         Files.deleteIfExists(path);
     }
+
+    /**
+     * Publish a closed, verified object by creating its final directory entry without
+     * replacement. Caller owns temporary cleanup. Unlike ATOMIC_MOVE, createLink
+     * has explicit fail-if-present semantics. Both paths must be on the same volume.
+     */
+    protected void linkObject(Path temporary, Path destination) throws IOException {
+        Files.createLink(destination, temporary);
+    }
 }

@@ -1,15 +1,11 @@
 package com.vrn.cli;
 
-import com.vrn.core.FileScanner;
-import com.vrn.core.ObjectStore;
-import com.vrn.core.ScannedFile;
-import com.vrn.core.StagingArea;
+import com.vrn.core.AddService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -35,31 +31,21 @@ public class AddCommand implements Callable<Integer> {
                 return 1;
             }
 
-            FileScanner scanner = new FileScanner();
-            ObjectStore objectStore =
-                    new ObjectStore(projectRoot.resolve(".vrn"));
-            StagingArea stagingArea =
-                    new StagingArea(projectRoot.resolve(".vrn"));
+            AddService.Result result = new AddService(projectRoot).add(path);
 
-            List<ScannedFile> files = scanner.scanForAdd(projectRoot, path);
-
-            if (files.isEmpty()) {
+            if (result.selectedFiles() == 0) {
                 System.out.println("No eligible files to stage; the directory is empty or its untracked files match ignore rules.");
+                if (result.warning() != null) System.err.println("Warning: " + result.warning());
                 return 0;
             }
 
-            for (ScannedFile file : files) {
-                // Pass the already-read bytes so the file is not read twice.
-                objectStore.store(file.hash(), file.bytes());
-                stagingArea.stage(file.path(), file.hash());
-            }
-
             System.out.println("Files staged successfully.");
+            if (result.warning() != null) System.err.println("Warning: " + result.warning());
             return 0;
 
         } catch (Exception e) {
             System.err.println(
-                    "Failed to add files: " + e.getMessage()
+                    "Failed to add files: " + e.getMessage().replace(projectRoot.toString(), "<project>")
             );
             return 1;
         }

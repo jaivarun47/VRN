@@ -5,10 +5,9 @@ import java.nio.file.Path;
 /**
  * Represents a file that has been scanned by {@link FileScanner}.
  *
- * <p>Carries both the project-relative path, the SHA-256 hash, and the
- * raw file bytes so that {@code AddCommand} can pass the bytes directly
- * to {@link ObjectStore} without reading the file a second time
- * (fixes the TOCTOU double-read bug).
+ * <p>Compatibility result for callers explicitly requesting captured bytes.
+ * The CLI add path uses metadata-only SelectedFile entries and streaming
+ * ObjectStore capture instead; it never accumulates these byte arrays.
  */
 public record ScannedFile(Path path, String hash, byte[] bytes) {
 }

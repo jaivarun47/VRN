@@ -20,8 +20,10 @@ status
 commit -m "Update Main and exclude OldFeature"
 ```
 
-`add` selects exact bytes as PUT and replaces a prior DELETE. It keeps its existing
-directory-scanning behavior. Missing files are errors; neither `add` nor `add .`
+`add` selects exact bytes as PUT and replaces a prior DELETE. Task 8B publishes an
+entire eligible selection through one atomic index replacement; a failed batch
+preserves the post-recovery index, including selections it would have replaced.
+See [atomic-batch-staging.md](atomic-batch-staging.md). Missing files are errors; neither `add` nor `add .`
 automatically selects deletions.
 
 `stage-delete` selects one repository-relative tracked regular-file destination.
@@ -104,7 +106,8 @@ paths, and atomic individual-index replacement. CommitRecovery retires any prior
 cleanup barrier before publishing fresh staging. Recovery fingerprints the raw
 index bytes, so it covers either index version without a recovery-format change.
 
-HEAD publication remains the commit point. Failed pre-publication retains intent;
+HEAD publication remains the commit command's commit point; add's commit point
+is its complete index replacement. Failed commit pre-publication retains intent;
 published commits can return cleanup warnings. A consumed index is hidden from
 status/typed reads even if cleanup failed. A changed fingerprint blocks cleanup;
 later selections are preserved. Recovery housekeeping can legitimately complete
@@ -112,8 +115,9 @@ before a later selection error; there is no blanket rollback claim.
 
 ## Boundaries
 
-No recursive deletion/unstaging, physical deletion, historical deletion, restore,
-automatic snapshots, registry, batch-add atomicity or streaming redesign is added.
+Task 8A added no recursive deletion/unstaging, physical deletion, historical
+deletion, restore, automatic snapshots, registry, batch-add atomicity or streaming
+redesign. Task 8B now adds batch index atomicity; the other features remain absent.
 File/directory replacement automation and full case-only rename commits remain
 deferred. Index path-conflict rules remain in force. Locks coordinate cooperating
 VRN processes; external namespace/content races and power-loss durability limits

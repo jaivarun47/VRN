@@ -111,6 +111,21 @@ java -jar $vrnJar status
 
 Selective staging uses, for example, `java -jar $vrnJar add src\Main.java`.
 Staging captures the selected bytes: edits made afterward remain unstaged.
+Each `add <path>` holds the repository mutation guard, prepares the complete
+selection, and atomically publishes the staging index once. Failure before
+publication preserves the post-recovery index byte for byte, including existing
+PUT and DELETE selections. Verified objects written during preparation may remain
+unreferenced after failure; add does not delete them. A confirmed complete index
+followed by a publication/cleanup error is reported as success with a warning;
+an uncertain outcome requires inspection before retrying. See
+[atomic batch staging](docs/atomic-batch-staging.md).
+Content capture streams through a reusable 64 KiB buffer into a same-directory
+temporary object; SHA-256 is calculated from those exact bytes. Verified objects
+are published without replacing existing objects. Detectable source changes
+abort the batch and request a retry. New object publication requires filesystem
+hard-link support (verified on Windows 11 NTFS); unsupported filesystems fail
+safely. See [bounded-memory capture](docs/bounded-memory-capture.md), including
+the constrained-heap checks and remaining source-race limitations.
 Once all current eligible files are committed without further changes, status
 reports a clean working directory.
 
@@ -171,9 +186,11 @@ files` and returns 0 without changing staging. See the
 - The verified runtime is Java 21. An existing project-junction status test fails
   on Java 26; bytecode compatibility does not qualify all newer JVM filesystem
   behavior. The build therefore uses the Java 21 toolchain even on a newer Gradle JVM.
-- Multi-file add can leave partial staging on failure. Scanning/hashing still uses
-  whole-file buffers. No repository-wide repair, garbage collection, or cross-platform
-  qualification is provided.
+- Add content capture and status hashing use fixed-size buffers. Path discovery,
+  staging entries and serialized metadata still grow with the number of files;
+  staging is not globally constant-memory. Index atomicity does not freeze working
+  files or provide power-loss durability. No repository-wide repair, garbage
+  collection, or cross-platform qualification is provided.
 
 Focused contracts: [metadata preflight](docs/repository-preflight.md),
 [working-tree status](docs/working-tree-status.md),

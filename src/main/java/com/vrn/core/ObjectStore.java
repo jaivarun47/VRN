@@ -8,6 +8,7 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -25,15 +26,60 @@ public class ObjectStore {
     private final Path objectsDirectory;
     private final Path storage;
     private final AtomicFilePublisher files;
+    private final ContentCapture capture;
 
     public ObjectStore(Path storage) {
         this(storage, new AtomicFilePublisher());
     }
 
     ObjectStore(Path storage, AtomicFilePublisher files) {
+        this(storage, files, new ContentCapture());
+    }
+
+    ObjectStore(Path storage, AtomicFilePublisher files, ContentCapture capture) {
         this.storage = storage.toAbsolutePath().normalize();
         this.objectsDirectory = this.storage.resolve("objects");
         this.files = files;
+        this.capture = capture;
+    }
+
+    /** Caller holds the repository guard; no source-sized byte arrays or index writes. */
+    String captureLocked(Path projectRoot, SelectedFile selected) throws Exception {
+        Path directory = new MetadataPaths(storage).directory("objects");
+        Path temporary = Files.createTempFile(directory, ".capture-", ".tmp");
+        Throwable primary = null;
+        try {
+            String id = capture.capture(projectRoot, selected, temporary);
+            validateIdentifier(id);
+            // Independent streaming verification of the exact prepared bytes before exposure.
+            if (!id.equals(new FileHasher().hash(temporary))) {
+                throw failure(DIGEST_MISMATCH, id, "Prepared object differs from captured bytes.", null);
+            }
+            Path object = objectPath(id);
+            boolean exists;
+            try { Files.readAttributes(object, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS); exists = true; }
+            catch (NoSuchFileException absent) { exists = false; }
+            if (!exists) {
+                try {
+                    files.linkObject(temporary, object);
+                } catch (FileAlreadyExistsException collision) {
+                    // An external creator won the race. Verify, never replace, its object.
+                } catch (IOException | RuntimeException failure) {
+                    throw failure(PUBLICATION_FAILED, id, "Prepared object publication failed; no automatic repair was attempted.", failure);
+                }
+            }
+            verify(id);
+            return id;
+        } catch (Exception | Error failure) {
+            primary = failure;
+            throw failure;
+        } finally {
+            try { files.delete(temporary); }
+            catch (IOException | RuntimeException cleanupFailure) {
+                if (primary != null) primary.addSuppressed(cleanupFailure);
+                else throw cleanupFailure;
+            }
+        }
     }
 
     public static void validateIdentifier(String id) throws ObjectIntegrityException {
@@ -51,24 +97,36 @@ public class ObjectStore {
         requireSafeStorage();
         objectPath(id); // Preserve object-specific unsafe-path diagnostics before generic guarded preflight.
         try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(storage)) {
-            Path object = objectPath(id);
-            try {
-                Files.readAttributes(object, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-            } catch (NoSuchFileException absent) {
-                try {
-                    files.replace(object, content);
-                } catch (IOException | RuntimeException publicationFailure) {
-                    throw failure(PUBLICATION_FAILED, id,
-                            "Object write/publication failed; no automatic repair was attempted.", publicationFailure);
-                }
-                // Also detect an interrupted/mutating caller buffer or defective publication before reporting success.
-                verify(id);
-                return;
-            } catch (IOException unreadable) {
-                throw failure(UNREADABLE, id, "Existing object attributes cannot be read.", unreadable);
-            }
-            verify(id);
+            storeValidatedLocked(id, content);
         }
+    }
+
+    /** Caller must hold this repository's mutation guard for the entire batch. */
+    void storeLocked(String id, byte[] content) throws Exception {
+        validateIdentifier(id);
+        if (content == null) throw new IllegalArgumentException("Object content is required");
+        checkDigest(id, digest().digest(content), "Incoming content does not match the supplied object identifier.");
+        storeValidatedLocked(id, content);
+    }
+
+    private void storeValidatedLocked(String id, byte[] content) throws Exception {
+        Path object = objectPath(id);
+        try {
+            Files.readAttributes(object, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        } catch (NoSuchFileException absent) {
+            try {
+                files.replace(object, content);
+            } catch (IOException | RuntimeException publicationFailure) {
+                throw failure(PUBLICATION_FAILED, id,
+                        "Object write/publication failed; no automatic repair was attempted.", publicationFailure);
+            }
+            // Also detect an interrupted/mutating caller buffer or defective publication before reporting success.
+            verify(id);
+            return;
+        } catch (IOException unreadable) {
+            throw failure(UNREADABLE, id, "Existing object attributes cannot be read.", unreadable);
+        }
+        verify(id);
     }
 
     /** One streaming digest pass. No object bytes or successful result are cached across calls. */

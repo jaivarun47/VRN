@@ -1,5 +1,8 @@
 # Add and ignore rules — MT-001 / MT-002
 
+This page records the original repair checkpoint. Task 8B now coordinates the
+same selection policy through [atomic batch staging](atomic-batch-staging.md).
+
 This focused post-8A repair began on clean `core-completion` at `d2e1800`.
 Task 8A was committed. No user manual-testing repository was accessed or reused;
 all execution-based reproduction used newly created temporary repositories.
@@ -75,11 +78,11 @@ intentionally updated by add. Explicit ignored-untracked rejection and empty dir
 selection leave the index unchanged. Ignore rules added/removed later do not rewrite
 existing staging intent. Unstage and stage-delete retain their post-8A behavior.
 
-The metadata membership capture is coherent, but scanning and per-file staging are
-still separate operations. Multi-file add can still leave partial staging after a
-later publication failure. External namespace/content changes are not frozen.
-Atomic batch staging, streaming capture, case-only rename commit semantics and all
-other Task 8B/later work remain deferred.
+At this repair's checkpoint, coherent membership capture and per-file staging were
+separate, so multi-file add could leave partial staging after a later failure.
+Task 8B supersedes that limitation: the complete add selection now shares one
+guard and one index publication. External namespace/content changes remain
+unfrozen. Streaming capture and full case-only rename semantics remain deferred.
 
 ## Verification
 

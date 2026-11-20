@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.Collection;
 
 public class StagingArea {
 
@@ -28,17 +29,25 @@ public class StagingArea {
         try (RepositoryMutationGuard ignored = RepositoryMutationGuard.acquire(storage)) {
             new CommitRecovery(storage, files).recover();
             Map<String, StagedOperation> entries = readOperationsLocked();
-            CaseOnlyPaths.requirePut(storage.toAbsolutePath().normalize().getParent(), relativePath,
-                    headFiles().keySet(), entries.keySet());
-            List<String> deletions = entries.entrySet().stream()
-                    .filter(entry -> entry.getValue() instanceof StagedOperation.Delete).map(Map.Entry::getKey).toList();
-            if (!deletions.isEmpty()) {
-                String selected = new StagingPaths(storage.toAbsolutePath().normalize().getParent(), path).match(deletions);
-                if (selected != null) relativePath = selected;
-            }
-            entries.put(relativePath, new StagedOperation.Put(hash));
+            putLocked(entries, headFiles().keySet(), path, hash);
             publish(entries);
         }
+    }
+
+    /** Merge only; the caller owns the guard and publishes the complete batch separately. */
+    void putLocked(Map<String, StagedOperation> entries, Collection<String> committed,
+                   Path path, String hash) throws Exception {
+        String relativePath = path.toString().replace('\\', '/');
+        SnapshotManifestValidator.validatePath(relativePath);
+        CaseOnlyPaths.requirePut(storage.toAbsolutePath().normalize().getParent(), relativePath,
+                committed, entries.keySet());
+        List<String> deletions = entries.entrySet().stream()
+                .filter(entry -> entry.getValue() instanceof StagedOperation.Delete).map(Map.Entry::getKey).toList();
+        if (!deletions.isEmpty()) {
+            String selected = new StagingPaths(storage.toAbsolutePath().normalize().getParent(), path).match(deletions);
+            if (selected != null) relativePath = selected;
+        }
+        entries.put(relativePath, new StagedOperation.Put(hash));
     }
 
     /**
