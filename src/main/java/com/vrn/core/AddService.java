@@ -61,16 +61,17 @@ public final class AddService {
             var selected = scanner.selectForAddLocked(root, selection, known);
             count = selected.size();
             if (count == 0) return new Result(0, null);
+            PathTransitions.prepare(root, selection, head, entries, selected);
             for (SelectedFile file : selected) {
                 try {
                     String hash = objects.captureLocked(root, file);
-                    staging.putLocked(entries, head.keySet(), file.path(), hash);
+                    entries.put(file.path().toString().replace('\\', '/'), new StagedOperation.Put(hash));
                 } catch (Exception failure) {
                     throw new IOException("Preparing PUT '" + file.path().toString().replace('\\', '/')
                             + "': " + failure.getMessage(), failure);
                 }
             }
-            SnapshotManifestValidator.validatePaths(entries.keySet());
+            StagingIndex.apply(head, entries);
             var references = new LinkedHashSet<String>();
             for (var entry : entries.entrySet()) {
                 switch (entry.getValue()) {

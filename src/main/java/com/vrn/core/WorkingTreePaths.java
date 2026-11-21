@@ -73,6 +73,24 @@ final class WorkingTreePaths {
         return trackedFile(stored, false);
     }
 
+    /** Prove an existing directory alias component by component without following reparse entries. */
+    Path directoryForTransition(String stored) throws IOException {
+        SnapshotManifestValidator.validatePath(stored);
+        Path parent = realRoot;
+        for (String component : stored.split("/")) {
+            Path requested = parent.resolve(component);
+            var attributes = Files.readAttributes(requested, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            if (!attributes.isDirectory() || attributes.isSymbolicLink() || attributes.isOther()) {
+                throw new IOException("Unsupported directory transition or reparse entry: " + stored);
+            }
+            List<String> candidates = names(parent).stream().filter(name -> name.equalsIgnoreCase(component)).toList();
+            if (candidates.size() != 1) throw new IOException("Ambiguous directory transition: " + stored);
+            parent = parent.resolve(candidates.getFirst());
+            directory(parent);
+        }
+        return relative(parent, parent);
+    }
+
     private Path trackedFile(String stored, boolean allowReplacement) throws IOException {
         SnapshotManifestValidator.validatePath(stored);
         String[] parts = stored.split("/");

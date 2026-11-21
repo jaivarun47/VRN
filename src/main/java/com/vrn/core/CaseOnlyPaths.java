@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 
-/** Explicit support boundary for filename changes; never establishes identity by hash or folding. */
+/** Single-PUT safety guard; complete transitions are selected through AddService. */
 final class CaseOnlyPaths {
     private CaseOnlyPaths() {}
 
@@ -33,8 +33,8 @@ final class CaseOnlyPaths {
     }
 
     static IOException unsupported(String recorded, String selected) {
-        return new IOException("Case-only path transitions are not supported: '" + recorded + "' -> '" + selected
-                + "'. Restore recorded filename spelling before add/commit; use unstage to remove a conflicting selection.");
+        return new IOException("Case-only path transition requires a complete add selection: '" + recorded + "' -> '" + selected
+                + "'. Use add on the changed file, directory or an ancestor before committing.");
     }
 
     private static String canonical(Path path) { return path.toString().replace('\\', '/'); }

@@ -1,6 +1,7 @@
 # Staging intent — Task 8A
 
-MT-003 tightens case-only PUT handling; see [case-only-path-policy.md](case-only-path-policy.md).
+Task 8D adds [case/type path transitions](path-transitions.md) through complete
+DELETE/PUT selections. MT-003's original rejection policy is historical.
 The verification checkpoint below records the historical Task 8A completion.
 
 The manual index is a current selection, not a command log. A path has PUT(hash),
@@ -24,7 +25,8 @@ commit -m "Update Main and exclude OldFeature"
 entire eligible selection through one atomic index replacement; a failed batch
 preserves the post-recovery index, including selections it would have replaced.
 See [atomic-batch-staging.md](atomic-batch-staging.md). Missing files are errors; neither `add` nor `add .`
-automatically selects deletions.
+automatically selects general missing-file deletions. Task 8D generates DELETEs
+only for selected structural obstructions and proven case transitions.
 
 `stage-delete` selects one repository-relative tracked regular-file destination.
 It works when the file is present or missing and replaces an existing tracked PUT.
@@ -37,14 +39,19 @@ no-op without index publication. It never restores the HEAD version. Empty index
 remain valid and contain zero operations; they do not permit a commit.
 
 Both commands preserve working files, objects, snapshots, manual HEAD and `.vrnauto/`.
-Paths are single-file selections: directories, traversal, absolute paths, root
-internal storage, unsupported links/reparse entries and ambiguous identities fail.
+Paths are single-file logical selections, never recursive directory selections.
+Traversal, absolute paths, root internal storage, unsupported links/reparse
+entries and ambiguous identities fail.
 Existing case aliases require successful filesystem lookup and actual spelling
 agreement. Missing selections use exact stored spelling rather than guessing case
-identity. Hard-linked names remain independent destinations. Replacing a staged
-DELETE with PUT requires the working filename to retain the recorded filename
-case. Case-only filename transitions are rejected rather than silently keeping
-the old spelling. DELETE and unstage still accept proven lookup aliases.
+identity. Hard-linked names remain independent destinations. Add records the
+actual source spelling and generates necessary old-path DELETEs. A transition
+index may contain DELETE/PUT case aliases or file/descendant pairs; PUTs and
+DELETEs are separately path-validated, and the applied manifest must remain valid.
+Unstage chooses an exact index spelling before trying lookup aliases. Logical
+staged paths can be canceled despite ordinary working type replacements, while
+reparse/ambiguous lookups still fail. Remove replacement PUTs before old DELETEs;
+an invalid partial cancellation is rejected atomically. No working files move.
 
 ## Status and commit
 
@@ -118,8 +125,8 @@ before a later selection error; there is no blanket rollback claim.
 Task 8A added no recursive deletion/unstaging, physical deletion, historical
 deletion, restore, automatic snapshots, registry, batch-add atomicity or streaming
 redesign. Task 8B now adds batch index atomicity; the other features remain absent.
-File/directory replacement automation and full case-only rename commits remain
-deferred. Index path-conflict rules remain in force. Locks coordinate cooperating
+Task 8D now supports the selected case/type transitions described above. Snapshot
+path-conflict rules remain in force. Locks coordinate cooperating
 VRN processes; external namespace/content races and power-loss durability limits
 remain as documented for prior tasks.
 

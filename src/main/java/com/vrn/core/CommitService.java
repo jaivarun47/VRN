@@ -58,19 +58,13 @@ public final class CommitService {
             if (!parentId.equals("NONE")) {
                 manifest.putAll(snapshots.load(parentId).files());
             }
+            manifest = StagingIndex.apply(manifest, staged);
+            var puts = staged.entrySet().stream().filter(entry -> entry.getValue() instanceof StagedOperation.Put).map(Map.Entry::getKey).toList();
             for (var entry : staged.entrySet()) {
                 if (entry.getValue() instanceof StagedOperation.Put) {
                     CaseOnlyPaths.requirePut(storage.toAbsolutePath().normalize().getParent(), entry.getKey(),
-                            manifest.keySet(), staged.keySet());
+                            manifest.keySet(), puts);
                 }
-            }
-            for (var entry : staged.entrySet()) {
-                if (entry.getValue() instanceof StagedOperation.Delete && manifest.remove(entry.getKey()) == null) {
-                    throw new IllegalArgumentException("DELETE path is not tracked in HEAD: " + entry.getKey());
-                }
-            }
-            for (var entry : staged.entrySet()) {
-                if (entry.getValue() instanceof StagedOperation.Put put) manifest.put(entry.getKey(), put.contentHash());
             }
             SnapshotManifestValidator.validatePaths(manifest.keySet());
             // Verify the complete inherited-plus-staged candidate before publishing any new metadata.

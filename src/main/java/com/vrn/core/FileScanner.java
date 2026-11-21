@@ -55,7 +55,6 @@ public class FileScanner {
     /** Metadata-only discovery for streaming add; never retains file contents. */
     List<SelectedFile> selectForAddLocked(Path root, Path targetPath, Set<String> known) throws Exception {
         Map<String, Path> selected = new LinkedHashMap<>();
-        Map<String, Path> recorded = new LinkedHashMap<>();
         // Retain all existing traversal, containment and mandatory internal-directory checks.
         for (Path path : ProjectFileWalker.collect(root, targetPath)) selected.put(canonical(path), path);
         Path target = root.toRealPath().resolve(root.relativize(root.resolve(targetPath).normalize()));
@@ -77,11 +76,8 @@ public class FileScanner {
             String path = canonical(actual);
             boolean inScope = attributes.isDirectory() ? scope.isEmpty() || path.startsWith(prefix) : path.equals(scope);
             if (inScope) {
-                if (CaseOnlyPaths.fileNameChanged(stored, path)) throw CaseOnlyPaths.unsupported(stored, path);
                 selected.putIfAbsent(path, actual);
-                // Existing parent-directory aliases are content lookups, not recorded renames.
-                // Lookup proved identity above; keep the exact HEAD/index spelling for the PUT.
-                recorded.putIfAbsent(path, Path.of(stored));
+                // Transition planning reconciles recorded spellings; PUT uses actual spelling.
             }
         }
         if (selected.isEmpty() && attributes.isRegularFile()) {
@@ -91,7 +87,7 @@ public class FileScanner {
         SnapshotManifestValidator.validatePaths(selected.keySet());
         List<SelectedFile> result = new ArrayList<>();
         for (var entry : selected.entrySet()) {
-            result.add(new SelectedFile(entry.getValue(), recorded.getOrDefault(entry.getKey(), entry.getValue()),
+            result.add(new SelectedFile(entry.getValue(), entry.getValue(),
                     ContentCapture.observe(root, entry.getValue())));
         }
         return List.copyOf(result);

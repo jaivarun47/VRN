@@ -144,7 +144,17 @@ For a staged-only addition, it cancels that PUT instead. Repeated deletion selec
 is idempotent; unknown deletions fail. Unstaging an unselected valid file path is a
 no-op. Both commands select one repository-relative file; when absent, use its exact
 stored spelling. `add` can replace DELETE with PUT, but missing files and `add .`
-never automatically select deletions. See [staging intent](docs/staging-intent.md).
+do not automatically select unrelated missing-file deletions. See
+[staging intent](docs/staging-intent.md).
+
+`add` also supports proven case-only file/directory changes and file/directory
+replacements. It selects the necessary old-path DELETEs together with actual-
+spelling PUTs atomically. For a directory capitalization change, select the highest
+changed directory or an ancestor; descendant-only adds reject with guidance.
+Missing unrelated files still require explicit deletion staging. To cancel a
+transition, unstage replacement PUTs first, then old-path DELETEs, using exact
+record spellings. Unsafe partial cancellation is rejected without changing the
+index. See [path transitions](docs/path-transitions.md) for scope and examples.
 
 Manual state lives in `.vrn/`: raw SHA-256 content objects, full snapshot
 manifests, staging, configuration, and HEAD. HEAD identifies the active snapshot.
@@ -174,12 +184,11 @@ files` and returns 0 without changing staging. See the
   manifests do not yet provide a supported restoration workflow.
 - **Automatic versioning is not implemented.** `.vrnauto/` is reserved/protected;
   no daemon, monitoring, independent automatic history, or retention exists.
-- File/directory replacement commits and complete case-only rename commits are
-  unsupported. Status explicitly reports unsupported filename-case changes;
-  affected PUTs are rejected by add/commit until the recorded filename spelling is
-  restored and any conflicting selection is unstaged. Parent-directory lookup
-  aliases preserve recorded spelling. See the
-  [case-only path policy](docs/case-only-path-policy.md).
+- Arbitrary rename inference and similarity detection are unavailable. Supported
+  case/type transitions require a complete eligible selection and an unambiguous
+  filesystem lookup. Directory capitalization changes require whole-directory
+  selection; empty directories are not tracked. See
+  [path transitions](docs/path-transitions.md).
 - Symbolic links, junctions, and other observable reparse entries have limited
   support and can be rejected. Ambiguous case-sensitive destinations are outside
   the current identity model. External filesystem races remain possible.

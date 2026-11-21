@@ -52,7 +52,7 @@ public class WorkingTreeStatus {
     /** Newly discovered files and retained working files whose staged selection is DELETE. */
     public final List<String> untracked;
 
-    /** Unsupported working filename changes or existing staged spelling transitions. */
+    /** Working case changes not yet selected as complete DELETE/PUT transitions. */
     public final List<String> caseOnlyChanges;
 
     private WorkingTreeStatus(
@@ -111,20 +111,26 @@ public class WorkingTreeStatus {
         Map<String, String> destinations = new HashMap<>();
         Map<String, Path> workingPaths = new HashMap<>();
         Set<String> caseChanges = new TreeSet<>();
+        var putPaths = captured.staged().entrySet().stream().filter(entry -> entry.getValue() instanceof StagedOperation.Put)
+                .map(Map.Entry::getKey).toList();
         for (String stored : storedPaths) {
             Path actual = identity.trackedFile(stored);
-            String destination = actual == null ? stored : canonical(actual);
+            boolean replacement = captured.staged().get(stored) instanceof StagedOperation.Delete
+                    && putPaths.stream().anyMatch(path -> !path.equals(stored) && StagingIndex.related(stored, path));
+            String destination = actual == null || replacement ? stored : canonical(actual);
             destinations.put(stored, destination);
-            if (actual != null) workingPaths.put(destination, actual);
+            if (actual != null) workingPaths.put(canonical(actual), actual);
             if (actual != null && !(captured.staged().get(stored) instanceof StagedOperation.Delete)
-                    && CaseOnlyPaths.fileNameChanged(stored, destination)) {
-                caseChanges.add("working filename: " + stored + " -> " + destination);
+                    && !stored.equals(canonical(actual))) {
+                caseChanges.add("working path: " + stored + " -> " + canonical(actual));
             }
         }
         for (var entry : captured.staged().entrySet()) {
             if (entry.getValue() instanceof StagedOperation.Put) {
                 String alternate = CaseOnlyPaths.alternateSpelling(entry.getKey(), captured.committed().keySet());
-                if (alternate != null) caseChanges.add("staged path: " + alternate + " -> " + entry.getKey());
+                if (alternate != null && !(captured.staged().get(alternate) instanceof StagedOperation.Delete)) {
+                    caseChanges.add("staged path: " + alternate + " -> " + entry.getKey());
+                }
             }
         }
         Map<String, StagedOperation> staged = byDestination(captured.staged(), destinations);
@@ -137,7 +143,9 @@ public class WorkingTreeStatus {
         for (String path : display.keySet()) {
             String previous = aliases.putIfAbsent(path, path);
             if (previous != null && !previous.equals(path)) {
-                throw new IOException("VRN support limitation: cannot reconcile distinct selected destinations '"
+                boolean transition = staged.get(previous) instanceof StagedOperation.Delete && staged.get(path) instanceof StagedOperation.Put
+                        || staged.get(path) instanceof StagedOperation.Delete && staged.get(previous) instanceof StagedOperation.Put;
+                if (!transition) throw new IOException("VRN support limitation: cannot reconcile distinct selected destinations '"
                         + previous + "' and '" + path + "' without an unambiguous existing file");
             }
         }

@@ -3,6 +3,8 @@
 Task 8C preserves this transaction contract and replaces batch byte retention with
 [bounded-memory streaming capture](bounded-memory-capture.md). The implementation
 inventory and verification checkpoint below describe the original Task 8B state.
+Task 8D adds [complete case/type transitions](path-transitions.md) inside the same
+transaction; the earlier MT-003 rejection boundary is superseded for supported adds.
 
 One `vrn add <path>` invocation prepares all eligible files before replacing
 `.vrn/staging/index` once. The replacement is the logical commit point. This
@@ -85,9 +87,9 @@ whole-invocation atomicity.
 - `.vrn/` and `.vrnauto/` root internals are always protected independently of
   ignore rules. Nested resources and compatible Unicode/special filenames remain
   supported. Junction, reparse, containment and ambiguity checks remain enforced.
-- Unsupported filename-case transitions still fail explicitly. Case lookup
-  aliases retain recorded spelling; no case-only rename support is introduced
-  (MT-003). File/directory replacement semantics remain reserved for Task 8D.
+- Task 8D records supported actual spellings and necessary structural DELETEs
+  atomically. Incomplete directory selections and unproven/ambiguous aliases fail
+  explicitly; the resulting snapshot must pass the strict manifest validator.
 - Missing working files never become implicit DELETEs. `stage-delete`, `unstage`,
   commit recovery, status categories and HEAD's commit publication point retain
   their existing semantics.

@@ -1,5 +1,9 @@
 # Bounded-memory content capture — Task 8C
 
+Task 8D subsequently adds [selected path transitions](path-transitions.md), retaining
+this streaming implementation and hard-link publication. The verification and
+remaining-work checkpoint below records Task 8C's historical completion state.
+
 CLI `add <path>` now streams source bytes with a reusable 64 KiB buffer. File
 contents are not retained in the selected-file list. Task 8B's complete-operation
 guard, post-recovery baseline and single staging-index publication are unchanged.

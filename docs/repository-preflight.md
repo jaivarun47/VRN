@@ -16,6 +16,11 @@ metadata store, while `ObjectStore` verifies content and `CommitService` verifie
 the final candidate's objects before activation. Parsing opaque legacy reference
 tokens still does not certify their content integrity.
 
+Task 8D's index checks are operation-aware: PUT and DELETE path sets are validated
+separately so complete transitions remain readable, including consumed indexes
+awaiting recovery. This gate does not apply an old consumed index to the new HEAD.
+Add/commit validate the complete applied manifest; snapshot validation is unchanged.
+
 The preflight does not acquire a lock or call recovery. Snapshot loading uses the
 nonrecursive structural gate, not full `validate`. Thus layout inspection can
 load a snapshot and inspect recovery without cycling back into validation.

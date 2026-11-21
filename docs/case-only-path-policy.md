@@ -1,5 +1,9 @@
 # Case-only paths — MT-003
 
+This page records the historical MT-003 safety boundary. Task 8D supersedes its
+ordinary-rename rejection policy with [complete path transitions](path-transitions.md).
+Genuine ambiguities and incomplete single-PUT transitions remain rejected.
+
 Full recorded case-only rename semantics remain deferred to Task 8D. This repair
 makes unsupported filename transitions explicit without changing persisted formats,
 rewriting history or treating content hashes as path-identity evidence.

@@ -40,7 +40,7 @@ class WindowsStatusIdentityTest {
         Files.writeString(root.resolve("Src/B.java"),"B");
         StatusCorrectnessTest.installHead(root,Map.of("Src/A.java",StatusCorrectnessTest.digest("A"),"src/B.java",StatusCorrectnessTest.digest("B")));
         rename(root.resolve("Src"),root.resolve("src"));
-        assertTrue(WorkingTreeStatus.compute(root).isClean());
+        assertFalse(WorkingTreeStatus.compute(root).caseOnlyChanges.isEmpty());
         Files.writeString(root.resolve("src/A.java"),"C");
         var status=WorkingTreeStatus.compute(root);
         assertEquals(List.of("src/A.java"),status.modifiedNotStaged);

@@ -67,7 +67,7 @@ class SnapshotManifestValidatorTest {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> SnapshotManifestValidator.validatePaths(List.of("a/b/c", "a/d/e", "a")));
         assertTrue(error.getMessage().contains("file/directory conflict"));
-        assertTrue(error.getMessage().contains("replacement are not supported"));
+        assertTrue(error.getMessage().contains("cannot contain both"));
     }
 
     @Test

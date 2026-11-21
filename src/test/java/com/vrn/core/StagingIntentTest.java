@@ -112,6 +112,20 @@ class StagingIntentTest {
     void loadedOperationsStillEnforceExistingPathAndDestinationRules(String other) throws Exception {
         String raw = MetadataCodec.encodeOperations(Map.of("old.txt", new StagedOperation.Delete(), other, new StagedOperation.Put(oldHash)));
         Files.writeString(storage.resolve("staging/index"), raw);
+        if (other.equals("OLD.txt") || other.equals("old.txt/child.txt")) {
+            var complete = staging.readOperations();
+            RepositoryLayout.validate(storage);
+            var result = StagingIndex.apply(new SnapshotStore(storage).load(parent).files(), complete);
+            assertFalse(result.containsKey("old.txt"));
+            assertEquals(oldHash, result.get(other));
+            assertEquals(raw, Files.readString(storage.resolve("staging/index")));
+            String incomplete = MetadataCodec.encodeOperations(Map.of(other, new StagedOperation.Put(oldHash)));
+            Files.writeString(storage.resolve("staging/index"), incomplete);
+            assertThrows(IllegalArgumentException.class, () -> new CommitService(storage).commit("incomplete transition"));
+            assertEquals(incomplete, Files.readString(storage.resolve("staging/index")));
+            assertEquals(parent, Files.readString(storage.resolve("HEAD")));
+            return;
+        }
         assertThrows(IllegalArgumentException.class, staging::readOperations);
         assertThrows(IOException.class, () -> RepositoryLayout.validate(storage));
         assertEquals(raw, Files.readString(storage.resolve("staging/index")));

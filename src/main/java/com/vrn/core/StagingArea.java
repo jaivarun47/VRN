@@ -87,7 +87,7 @@ public class StagingArea {
         }
         try {
             Map<String, StagedOperation> entries = MetadataCodec.decodeOperations(paths.readLines("staging/index"));
-            SnapshotManifestValidator.validatePaths(entries.keySet());
+            StagingIndex.validate(entries);
             return entries;
         } catch (NoSuchFileException absent) {
             return new LinkedHashMap<>();
@@ -103,9 +103,8 @@ public class StagingArea {
             new CommitRecovery(storage, files).recover();
             Map<String, StagedOperation> entries = readOperationsLocked();
             Map<String, String> head = headFiles();
-            StagingPaths selection = new StagingPaths(storage.toAbsolutePath().normalize().getParent(), path);
-            String committed = selection.match(head.keySet());
-            String staged = selection.match(entries.keySet());
+            String committed = match(path, head.keySet());
+            String staged = match(path, entries.keySet());
             if (committed == null) {
                 if (staged == null || !(entries.get(staged) instanceof StagedOperation.Put)) {
                     throw new IllegalArgumentException("Path is not tracked in HEAD or selected as a new PUT: " + path);
@@ -130,9 +129,13 @@ public class StagingArea {
             RepositoryLayout.validate(storage);
             new CommitRecovery(storage, files).recover();
             Map<String, StagedOperation> entries = readOperationsLocked();
-            String selected = new StagingPaths(storage.toAbsolutePath().normalize().getParent(), path).match(entries.keySet());
+            String selected = match(path, entries.keySet());
             if (selected == null) return false;
             entries.remove(selected);
+            try { StagingIndex.apply(headFiles(), entries); }
+            catch (IllegalArgumentException invalid) {
+                throw new java.io.IOException("Cannot unstage this side of the transition; unstage replacement PUTs first: " + invalid.getMessage(), invalid);
+            }
             publish(entries);
             return true;
         }
@@ -144,7 +147,7 @@ public class StagingArea {
     }
 
     private void publish(Map<String, StagedOperation> entries) throws Exception {
-        SnapshotManifestValidator.validatePaths(entries.keySet());
+        StagingIndex.validate(entries);
         files.replace(new MetadataPaths(storage).file("staging/index", false), MetadataCodec.encodeOperations(entries));
     }
 
@@ -157,6 +160,17 @@ public class StagingArea {
             new CommitRecovery(storage, files).recover();
             files.delete(new MetadataPaths(storage).file("staging/index", false));
         }
+    }
+
+    private String match(Path path, Collection<String> paths) throws Exception {
+        String requested = path.toString().replace('\\', '/');
+        SnapshotManifestValidator.validatePath(requested);
+        Path root = storage.toAbsolutePath().normalize().getParent();
+        if (paths.contains(requested)) {
+            new WorkingTreePaths(root).trackedFile(requested); // Reject unsafe/ambiguous paths, allow ordinary type replacements.
+            return requested;
+        }
+        return new StagingPaths(root, path).match(paths);
     }
 
     /** Retries interrupted cleanup without discarding fresh staging. */

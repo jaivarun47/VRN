@@ -196,10 +196,10 @@ class AtomicBatchStagingTest {
     }
 
     @Test void lateCandidatePathConflictAbortsAfterObjectPreparation() throws Exception {
-        // A formerly selected file is now a directory; Task 8D replacement is intentionally unsupported.
+        // A surviving unrelated PUT conflicts with an inherited file. The selected
+        // batch must not silently remove that unrelated intent to make itself valid.
         var entries = staging.readOperations();
-        entries.keySet().removeIf(path -> path.startsWith("batch/"));
-        entries.put("batch", new StagedOperation.Put(StatusCorrectnessTest.digest("old zero")));
+        entries.put(".vrnignore/child", new StagedOperation.Put(StatusCorrectnessTest.digest("old zero")));
         Files.writeString(index, MetadataCodec.encodeOperations(entries));
         checkpoint();
         assertUnchangedFailure(new AddService(root));

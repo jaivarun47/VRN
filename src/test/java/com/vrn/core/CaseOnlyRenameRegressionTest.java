@@ -42,28 +42,27 @@ class CaseOnlyRenameRegressionTest {
     }
 
     @ParameterizedTest @CsvSource({"false,false", "false,true", "true,false", "true,true"})
-    void renamedFileIsReportedAndBothExplicitSpellingsAreRejected(boolean modified, boolean ignored) throws Exception {
+    void renamedFileIsReportedAndBothExplicitSpellingsSelectCompleteTransition(boolean modified, boolean ignored) throws Exception {
         rename("hello.txt", "HELLO.TXT");
         if (modified) Files.writeString(root.resolve("HELLO.TXT"), "changed");
         if (ignored) Files.writeString(root.resolve(".vrnignore"), ".vrn/\n*.txt\n");
         String status = success("status");
         System.out.println("MT-003 before add:\n" + status);
-        assertTrue(status.contains("Unsupported case-only"), status);
+        assertTrue(status.contains("Case-only path changes"), status);
         assertTrue(status.contains("hello.txt") && status.contains("HELLO.TXT"), status);
         assertFalse(status.contains("working directory clean"), status);
         var core = WorkingTreeStatus.compute(root);
         assertTrue(core.deleted.isEmpty());
         assertTrue(core.untracked.isEmpty());
         assertEquals(modified, core.modifiedNotStaged.contains("HELLO.TXT"));
-        var before = RepositoryPreflightTest.tree(storage);
         for (String spelling : List.of("HELLO.TXT", "hello.txt")) {
             var add = run("add", spelling);
-            assertEquals(1, add.code(), add.output());
-            assertTrue(add.output().contains("Case-only"), add.output());
-            assertFalse(add.output().contains("Files staged successfully"));
-            assertEquals(before, RepositoryPreflightTest.tree(storage));
+            assertEquals(0, add.code(), add.output());
+            assertTrue(add.output().contains("Files staged successfully"));
+            assertEquals(Map.of("hello.txt", new StagedOperation.Delete(), "HELLO.TXT",
+                    new StagedOperation.Put(StatusCorrectnessTest.digest(modified ? "changed" : "original"))), staging.readOperations());
         }
-        assertTrue(staging.readOperations().isEmpty());
+        assertTrue(WorkingTreeStatus.compute(root).caseOnlyChanges.isEmpty());
         assertEquals(parent, Files.readString(storage.resolve("HEAD")));
         assertEquals(modified ? "changed" : "original", Files.readString(root.resolve("HELLO.TXT")));
     }
@@ -77,19 +76,19 @@ class CaseOnlyRenameRegressionTest {
         Files.writeString(storage.resolve("staging/index"), legacySelection);
         byte[] historical = Files.readAllBytes(storage.resolve("snapshots/" + parent + ".snapshot"));
         String status = success("status");
-        assertTrue(status.contains("Unsupported case-only"), status);
+        assertTrue(status.contains("Case-only path changes"), status);
         assertFalse(WorkingTreeStatus.compute(root).isClean());
         assertEquals(modified, WorkingTreeStatus.compute(root).stagedModifications.contains("HELLO.TXT"));
         var commit = run("commit", "-m", "unsupported-case-transition");
         assertEquals(1, commit.code(), commit.output());
-        assertTrue(commit.output().contains("Case-only"), commit.output());
+        assertTrue(commit.output().contains("case-equivalent"), commit.output());
         assertEquals(parent, Files.readString(storage.resolve("HEAD")));
         assertEquals(legacySelection, Files.readString(storage.resolve("staging/index")));
         assertArrayEquals(historical, Files.readAllBytes(storage.resolve("snapshots/" + parent + ".snapshot")));
         assertEquals(1, snapshotCount());
         success("unstage", "hello.txt");
         assertTrue(staging.readOperations().isEmpty());
-        assertTrue(success("status").contains("Unsupported case-only"));
+        assertTrue(success("status").contains("Case-only path changes"));
     }
 
     @Test void renameAfterStagingIsNotSilentlyCommittedAsTheOldSpelling() throws Exception {
@@ -102,7 +101,7 @@ class CaseOnlyRenameRegressionTest {
         assertArrayEquals(before, Files.readAllBytes(storage.resolve("staging/index")));
         assertEquals(parent, Files.readString(storage.resolve("HEAD")));
         success("unstage", "HELLO.TXT");
-        assertTrue(success("status").contains("Unsupported case-only"));
+        assertTrue(success("status").contains("Case-only path changes"));
     }
 
     @Test void lookupAliasWithoutPhysicalRenameStillSelectsTheActualRecordedSpelling() throws Exception {
@@ -119,8 +118,10 @@ class CaseOnlyRenameRegressionTest {
         byte[] original = Files.readAllBytes(storage.resolve("snapshots/" + parent + ".snapshot"));
         for (int i = 0; i < 3; i++) {
             rename("hello.txt", "HELLO.TXT");
-            assertTrue(success("status").contains("Unsupported case-only"));
-            assertEquals(1, run("add", "HELLO.TXT").code());
+            assertTrue(success("status").contains("Case-only path changes"));
+            success("add", "HELLO.TXT");
+            success("unstage", "HELLO.TXT");
+            success("unstage", "hello.txt");
             rename("HELLO.TXT", "hello.txt");
             assertTrue(WorkingTreeStatus.compute(root).isClean());
             success("add", "hello.txt");
@@ -143,9 +144,9 @@ class CaseOnlyRenameRegressionTest {
     @Test void stagedOnlyAdditionCanBeReselectedWithNewSpellingAfterExplicitUnstage() throws Exception {
         select("new.txt", "new");
         rename("new.txt", "NEW.TXT");
-        assertTrue(success("status").contains("Unsupported case-only"));
-        assertEquals(1, run("add", "NEW.TXT").code());
-        assertTrue(staging.readOperations().containsKey("new.txt"));
+        assertTrue(success("status").contains("Case-only path changes"));
+        success("add", "NEW.TXT");
+        assertFalse(staging.readOperations().containsKey("new.txt"));
         success("unstage", "NEW.TXT");
         success("add", "NEW.TXT");
         assertEquals(Map.of("NEW.TXT", new StagedOperation.Put(StatusCorrectnessTest.digest("new"))), staging.readOperations());
@@ -160,8 +161,8 @@ class CaseOnlyRenameRegressionTest {
         success("stage-delete", "HELLO.TXT");
         assertEquals(Map.of("hello.txt", new StagedOperation.Delete()), staging.readOperations());
         assertTrue(WorkingTreeStatus.compute(root).caseOnlyChanges.isEmpty(), "DELETE selects absence; the retained uppercase file is untracked");
-        assertEquals(1, run("add", "HELLO.TXT").code());
-        assertEquals(Map.of("hello.txt", new StagedOperation.Delete()), staging.readOperations());
+        success("add", "HELLO.TXT");
+        assertEquals(Map.of("hello.txt", new StagedOperation.Delete(), "HELLO.TXT", new StagedOperation.Put(hash)), staging.readOperations());
         success("unstage", "HELLO.TXT");
         assertEquals("original", Files.readString(root.resolve("HELLO.TXT")));
         success("stage-delete", "hello.txt");
@@ -182,14 +183,16 @@ class CaseOnlyRenameRegressionTest {
         files.put("src/B.txt", store("B"));
         new SnapshotStore(storage).save(new Snapshot("mixed", parent, 1, "mixed-parent-spelling", files));
         Files.writeString(storage.resolve("HEAD"), "mixed");
-        assertTrue(WorkingTreeStatus.compute(root).isClean());
+        assertFalse(WorkingTreeStatus.compute(root).caseOnlyChanges.isEmpty());
         Files.writeString(root.resolve("Src/B.txt"), "B changed");
-        success("add", "SRC/B.txt");
-        assertEquals(Map.of("src/B.txt", new StagedOperation.Put(StatusCorrectnessTest.digest("B changed"))), staging.readOperations());
+        assertEquals(1, run("add", "SRC/B.txt").code());
+        success("add", "Src");
+        assertEquals(Map.of("src/B.txt", new StagedOperation.Delete(), "Src/B.txt", new StagedOperation.Put(StatusCorrectnessTest.digest("B changed")),
+                "Src/A.txt", new StagedOperation.Put(StatusCorrectnessTest.digest("A"))), staging.readOperations());
         success("commit", "-m", "content-only-parent-alias");
         var next = new SnapshotStore(storage).load(Files.readString(storage.resolve("HEAD")));
-        assertTrue(next.files().containsKey("src/B.txt"));
-        assertFalse(next.files().containsKey("Src/B.txt"));
+        assertFalse(next.files().containsKey("src/B.txt"));
+        assertTrue(next.files().containsKey("Src/B.txt"));
         assertTrue(next.files().containsKey("Src/A.txt"));
         assertTrue(WorkingTreeStatus.compute(root).isClean());
     }
@@ -198,27 +201,30 @@ class CaseOnlyRenameRegressionTest {
         select("Mixed/Name.txt", "content");
         new CommitService(storage).commit("mixed-case-path");
         rename("Mixed", "MIXED");
-        assertTrue(WorkingTreeStatus.compute(root).isClean());
-        success("add", "MIXED/Name.txt");
-        assertEquals(Map.of("Mixed/Name.txt", new StagedOperation.Put(StatusCorrectnessTest.digest("content"))), staging.readOperations());
+        assertFalse(WorkingTreeStatus.compute(root).caseOnlyChanges.isEmpty());
+        assertEquals(1, run("add", "MIXED/Name.txt").code());
+        success("add", "MIXED");
+        assertEquals(Map.of("Mixed/Name.txt", new StagedOperation.Delete(), "MIXED/Name.txt", new StagedOperation.Put(StatusCorrectnessTest.digest("content"))), staging.readOperations());
         success("commit", "-m", "content-through-directory-alias");
         var next = new SnapshotStore(storage).load(Files.readString(storage.resolve("HEAD")));
-        assertTrue(next.files().containsKey("Mixed/Name.txt"));
-        assertFalse(next.files().containsKey("MIXED/Name.txt"));
+        assertFalse(next.files().containsKey("Mixed/Name.txt"));
+        assertTrue(next.files().containsKey("MIXED/Name.txt"));
     }
 
     @Test void rejectingRenamePreservesUnrelatedStagingAndUnrelatedCommitsRemainPossible() throws Exception {
         select("pending.txt", "selected pending contents");
         byte[] before = Files.readAllBytes(storage.resolve("staging/index"));
         rename("hello.txt", "HELLO.TXT");
-        assertEquals(1, run("add", ".").code());
         assertArrayEquals(before, Files.readAllBytes(storage.resolve("staging/index")));
         success("commit", "-m", "only-the-unrelated-selected-file");
         var next = new SnapshotStore(storage).load(Files.readString(storage.resolve("HEAD")));
         assertTrue(next.files().containsKey("hello.txt"));
         assertFalse(next.files().containsKey("HELLO.TXT"));
         assertTrue(next.files().containsKey("pending.txt"));
-        assertTrue(success("status").contains("Unsupported case-only"));
+        assertTrue(success("status").contains("Case-only path changes"));
+        success("add", ".");
+        success("commit", "-m", "complete selected rename");
+        assertTrue(WorkingTreeStatus.compute(root).isClean());
     }
 
     @ParameterizedTest @ValueSource(booleans = {false, true})

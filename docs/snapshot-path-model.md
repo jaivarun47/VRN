@@ -32,8 +32,11 @@ every NTFS directory is case-insensitive. See the evidence and classifications i
   Java 21 Path equality and isSameFile alone cannot establish that capability.
 - A file cannot also be a directory prefix, in either insertion order or under
   case-insensitive identity. Parent-plus-staging conflicts are rejected; inherited
-  entries are never silently removed. Deletion, replacement, and case-only rename
-  semantics remain future work.
+  entries are never silently removed except through selected DELETE intent.
+  Task 8D represents selected replacements/case changes with DELETE/PUT records,
+  applies DELETEs first and validates the resulting complete snapshot. The index
+  can contain transitional overlap; the final snapshot cannot. See
+  [path transitions](path-transitions.md).
 
 The component restrictions are based on Microsoft's
 [Windows naming rules](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file),
@@ -47,9 +50,10 @@ and entry listings are cached only within a scan, not persisted. Hard-link names
 remain distinct entries: neither file keys nor isSameFile are used to deduplicate.
 This helper is not a per-directory case-flag detector and never changes flags.
 
-`FileScanner` validates collected paths before hashing. `StagingArea` validates
-individual input and the resulting index before publication, and checks loaded
-index paths. Its existing Path-to-forward-slash conversion remains; a Path object
+`FileScanner` validates collected paths before capture. `StagingArea` validates
+individual paths and PUT/DELETE sets separately; AddService and CommitService
+also validate their application to HEAD. The full snapshot validator is not
+relaxed to accommodate transitional index records. Its existing Path-to-forward-slash conversion remains; a Path object
 may already have lost redundant separators during platform parsing. Snapshot
 metadata accepts only canonical spelling, rather than repairing such input.
 

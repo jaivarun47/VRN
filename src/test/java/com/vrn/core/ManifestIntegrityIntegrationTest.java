@@ -120,9 +120,8 @@ class ManifestIntegrityIntegrationTest {
             }
         };
 
-        Exception error = caseAlias
-                ? assertThrows(IOException.class, () -> new CommitService(storage, noPublication).commit("must be rejected"))
-                : assertThrows(IllegalArgumentException.class, () -> new CommitService(storage, noPublication).commit("must be rejected"));
+        Exception error = assertThrows(IllegalArgumentException.class,
+                () -> new CommitService(storage, noPublication).commit("must be rejected"));
 
         assertTrue(error.getMessage().contains(inherited), error.getMessage());
         assertTrue(error.getMessage().contains(stagedPath), error.getMessage());
@@ -251,7 +250,7 @@ class ManifestIntegrityIntegrationTest {
     }
 
     @Test
-    void actualCliRejectsAnUnsupportedFileToDirectoryReplacement_andPreservesStaging() throws Exception {
+    void actualCliCommitsACompleteFileToDirectoryReplacement_andPreservesHistory() throws Exception {
         Files.writeString(root.resolve("node"), "committed file");
         assertEquals(0, cli("add", "node").exitCode());
         Run first = cli("commit", "-m", "initial file");
@@ -263,18 +262,19 @@ class ManifestIntegrityIntegrationTest {
         Files.writeString(root.resolve("node/child.txt"), "replacement child");
         Run add = cli("add", "node");
         assertEquals(0, add.exitCode(), add.output());
-        byte[] staged = Files.readAllBytes(index);
+        assertInstanceOf(StagedOperation.Delete.class, new StagingArea(storage).readOperations().get("node"));
 
-        Run rejected = cli("commit", "-m", "unsupported replacement");
+        Run committed = cli("commit", "-m", "complete replacement");
 
-        assertEquals(1, rejected.exitCode(), rejected.output());
-        assertTrue(rejected.output().contains("file/directory conflict"), rejected.output());
-        assertTrue(rejected.output().contains("replacement are not supported"));
-        assertFalse(rejected.output().contains("Committed snapshot"));
-        assertEquals(parent, Files.readString(head));
-        assertArrayEquals(staged, Files.readAllBytes(index));
+        assertEquals(0, committed.exitCode(), committed.output());
+        assertNotEquals(parent, Files.readString(head));
+        var replacement = new SnapshotStore(storage).load(Files.readString(head));
+        assertEquals(parent, replacement.parentId());
+        assertFalse(replacement.files().containsKey("node"));
+        assertTrue(replacement.files().containsKey("node/child.txt"));
+        assertTrue(new StagingArea(storage).readOperations().isEmpty());
         assertArrayEquals(previousSnapshot, Files.readAllBytes(snapshotPath(parent)));
-        assertEquals(1, snapshotCount());
+        assertEquals(2, snapshotCount());
         assertFalse(Files.exists(storage.resolve("staging/commit.pending")));
     }
 

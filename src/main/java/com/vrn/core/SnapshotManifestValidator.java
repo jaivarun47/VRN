@@ -117,7 +117,7 @@ public final class SnapshotManifestValidator {
         String category = descendant.startsWith(file + "/") ? "invalid snapshot structure: "
                 : "VRN support limitation under case-equivalent identity: ";
         return invalid(category + "file/directory conflict between '" + file + "' and '" + descendant
-                + "'; deletion and file/directory replacement are not supported");
+                + "'; a snapshot cannot contain both a file and its descendants");
     }
 
     private static IllegalArgumentException invalid(String message) {
