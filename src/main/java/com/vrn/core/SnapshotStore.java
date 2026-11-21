@@ -61,6 +61,12 @@ public class SnapshotStore {
 
         MetadataCodec.validateSnapshotId(id);
         RepositoryLayout.preflight(storage);
+        return loadAnchored(id);
+    }
+
+    /** Caller has passed shared preflight; validate this immutable manifest without rereading HEAD. */
+    Snapshot loadAnchored(String id) throws Exception {
+        MetadataCodec.validateSnapshotId(id);
         Path snapshotPath = new MetadataPaths(storage).file("snapshots/" + id + ".snapshot", false);
 
         if (!Files.exists(snapshotPath, LinkOption.NOFOLLOW_LINKS)) {

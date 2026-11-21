@@ -90,6 +90,7 @@ The logical command name is `vrn`; this build does not install a system-wide
 | `unstage <path>` | Remove one PUT or DELETE selection; preserve working files and history. |
 | `commit -m "message"` | Apply staged PUT/DELETE selections to inherited files and publish a new snapshot. `--message` is also accepted. |
 | `status` | Compare HEAD, staged selections, and working files; report staged, unstaged, deleted, and untracked files. |
+| `log` | Inspect the complete committed parent chain from HEAD, newest first; never recover or modify repository state. |
 
 Root `--help`/`-h` and `--version`/`-V` are supported. Subcommand help flags are
 not currently enabled. Commands use the current directory; they do not search
@@ -107,6 +108,7 @@ java -jar $vrnJar status
 java -jar $vrnJar add .
 java -jar $vrnJar commit -m "Initial snapshot"
 java -jar $vrnJar status
+java -jar $vrnJar log
 ```
 
 Selective staging uses, for example, `java -jar $vrnJar add src\Main.java`.
@@ -161,6 +163,14 @@ manifests, staging, configuration, and HEAD. HEAD identifies the active snapshot
 Required objects are verified before a new snapshot becomes active. Publication
 is recoverable around HEAD's commit point; power-loss durability is not guaranteed.
 
+`log` follows authoritative parent links to `NONE`, displaying full identifiers,
+recorded UTC timestamps, and quoted messages with control characters escaped.
+Empty history reports `No snapshots found.`; invalid ancestry fails before any
+normal listing. It does not hash content objects or create a lock file. Pending
+commit recovery causes a read-only refusal; intentionally run an existing mutation
+command to perform recovery before retrying. No history flags are implemented.
+See [snapshot history](docs/snapshot-history.md) for validation and concurrency limits.
+
 `.vrnignore` contains optional user ignore rules. Supported rules include comments,
 literal names, root-relative directory prefixes ending in `/`, and one-`*`
 prefix/suffix patterns. A leading `/` anchor, negation, and recursive `**`
@@ -180,8 +190,9 @@ files` and returns 0 without changing staging. See the
 - Deletion/unstaging selection is single-file only; no recursive, wildcard, or
   multi-path selection is provided. Empty staging cannot commit. Explicit unchanged
   PUTs retain the existing behavior of allowing an identical-content snapshot.
-- **History/log and restore commands are not available.** Saved objects and
-  manifests do not yet provide a supported restoration workflow.
+- **Snapshot selection and restore commands are not available.** `log` inspects
+  only the ancestry reachable from HEAD; saved objects and manifests do not yet
+  provide a supported restoration workflow.
 - **Automatic versioning is not implemented.** `.vrnauto/` is reserved/protected;
   no daemon, monitoring, independent automatic history, or retention exists.
 - Arbitrary rename inference and similarity detection are unavailable. Supported

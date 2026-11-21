@@ -25,6 +25,13 @@ The preflight does not acquire a lock or call recovery. Snapshot loading uses th
 nonrecursive structural gate, not full `validate`. Thus layout inspection can
 load a snapshot and inspect recovery without cycling back into validation.
 
+Task 9A adds `RepositoryLayout.inspectedHead`, the same structural gate returning
+its single validated HEAD observation. Existing `preflight` callers retain their
+behavior. `SnapshotHistory` uses that anchor and `SnapshotStore.loadAnchored` for
+the same codec/path checks on each reachable manifest without rereading HEAD.
+It validates optional staging structurally, refuses any pending recovery record,
+and never acquires the mutation guard. See [snapshot history](snapshot-history.md).
+
 Public repository mutations acquire `RepositoryMutationGuard`, including object
 publication, index stage/clear/recover, snapshot save and commit. They cannot
 bypass the supported format and metadata boundary simply by avoiding the CLI.

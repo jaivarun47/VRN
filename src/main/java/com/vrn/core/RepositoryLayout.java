@@ -42,6 +42,11 @@ public final class RepositoryLayout {
 
     /** Format/structure gate shared by guarded APIs; no recovery, locking, graph or object hashing. */
     static void preflight(Path storage) throws IOException {
+        inspectedHead(storage);
+    }
+
+    /** Same observational gate, returning its one validated HEAD observation. Never locks or recovers. */
+    static String inspectedHead(Path storage) throws IOException {
         MetadataPaths paths = new MetadataPaths(storage);
         for (String directory : List.of("objects", "snapshots", "staging")) paths.directory(directory);
         // Check all known metadata leaves before reading any of them or creating the lock.
@@ -61,6 +66,7 @@ public final class RepositoryLayout {
             catch (IllegalArgumentException invalid) { throw new IOException(invalid.getMessage(), invalid); }
             paths.file("snapshots/" + id + ".snapshot", true);
         }
+        return id;
     }
 
     private static void validateConfig(List<String> lines) throws IOException {
