@@ -18,6 +18,8 @@ import java.util.Map;
  * Paths and messages use canonical Base64 of strict UTF-8, so their delimiters
  * and line endings are data. Identifiers are safe opaque tokens, not necessarily
  * UUIDs; object-reference syntax is checked here, not SHA-256/object integrity.
+ * Staging v2 adds explicit put/delete records, retaining the count and path encoding;
+ * snapshots and PUT-only index writes remain v1.
  *
  * <p>Legacy reads accept the original ordered snapshot fields and single-equals
  * file entries. Ambiguous comments, extra lines/delimiters and duplicate entries
@@ -26,6 +28,7 @@ import java.util.Map;
 final class MetadataCodec {
 
     private static final String INDEX_HEADER = "VRN-STAGING\t1";
+    private static final String OPERATIONS_HEADER = "VRN-STAGING\t2";
     private static final String SNAPSHOT_HEADER = "VRN-SNAPSHOT\t1";
 
     private MetadataCodec() {
@@ -44,6 +47,64 @@ final class MetadataCodec {
         }
         return readLegacyFiles(lines, 0, false);
     }
+
+    /** PUT-only indexes retain v1; a DELETE requires explicit operation records in v2. */
+    static String encodeOperations(Map<String, StagedOperation> operations) {
+        Map<String, String> puts = new LinkedHashMap<>();
+        boolean hasDelete = false;
+        for (var entry : operations.entrySet()) {
+            validatePath(entry.getKey());
+            switch (entry.getValue()) {
+                case StagedOperation.Put put -> puts.put(entry.getKey(), put.contentHash());
+                case StagedOperation.Delete ignored -> hasDelete = true;
+            }
+        }
+        if (!hasDelete) return encodeIndex(puts);
+        StringBuilder result = new StringBuilder(OPERATIONS_HEADER).append('\n')
+                .append("files\t").append(operations.size()).append('\n');
+        for (var entry : operations.entrySet()) {
+            String path = encodeText(entry.getKey(), "file path");
+            switch (entry.getValue()) {
+                case StagedOperation.Put put -> result.append("put\t").append(path).append('\t')
+                        .append(put.contentHash()).append('\n');
+                case StagedOperation.Delete ignored -> result.append("delete\t").append(path).append('\n');
+            }
+        }
+        return result.toString();
+    }
+
+    static Map<String, StagedOperation> decodeOperations(List<String> lines) {
+        Map<String, StagedOperation> result = new LinkedHashMap<>();
+        if (lines.isEmpty() || !lines.getFirst().equals(OPERATIONS_HEADER)) {
+            decodeIndex(lines).forEach((path, hash) -> result.put(path, new StagedOperation.Put(hash)));
+            return result;
+        }
+        String count = readField(lines, 1, "files");
+        try {
+            if (!count.matches("[0-9]+") || Integer.parseInt(count) != lines.size() - 2) {
+                throw invalid("file count does not match the number of operations");
+            }
+        } catch (NumberFormatException failure) {
+            throw invalid("file count must be a nonnegative 32-bit integer");
+        }
+        for (int i = 2; i < lines.size(); i++) {
+            String[] fields = lines.get(i).split("\t", -1);
+            StagedOperation operation;
+            if (fields.length == 3 && fields[0].equals("put")) {
+                operation = new StagedOperation.Put(fields[2]);
+            } else if (fields.length == 2 && fields[0].equals("delete")) {
+                operation = new StagedOperation.Delete();
+            } else {
+                throw invalid("malformed staging operation at line " + (i + 1));
+            }
+            String path = decodeText(fields[1], "file path at line " + (i + 1));
+            validatePath(path);
+            if (result.putIfAbsent(path, operation) != null) throw invalid("duplicate file path: " + path);
+        }
+        return result;
+    }
+
+    static void validateObjectReference(String value) { validateToken(value, "object reference"); }
 
     static String encodeSnapshot(Snapshot snapshot) {
         if (snapshot == null) {

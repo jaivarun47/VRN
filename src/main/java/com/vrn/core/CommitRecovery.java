@@ -1,7 +1,6 @@
 package com.vrn.core;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -18,20 +17,18 @@ final class CommitRecovery {
 
     private static final String HEADER = "VRN-COMMIT-CLEANUP\t1";
     private final Path storage;
-    private final Path index;
     private final Path pendingFile;
     private final AtomicFilePublisher files;
 
     CommitRecovery(Path storage, AtomicFilePublisher files) {
         this.storage = storage;
-        this.index = storage.resolve("staging/index");
         this.pendingFile = storage.resolve("staging/commit.pending");
         this.files = files;
     }
 
     void prepare(String snapshotId, String parentId) throws IOException {
-        files.replace(pendingFile, HEADER + "\nsnapshot\t" + snapshotId
-                + "\nparent\t" + parentId + "\nindex\t" + fingerprint(index) + "\n");
+        files.replace(new MetadataPaths(storage).file("staging/commit.pending", false), HEADER + "\nsnapshot\t" + snapshotId
+                + "\nparent\t" + parentId + "\nindex\t" + fingerprint() + "\n");
     }
 
     /** True means any remaining index belongs to the active commit, not pending work. */
@@ -46,21 +43,21 @@ final class CommitRecovery {
             return;
         }
         if (isPublished(pending)) {
-            files.delete(index);
+            files.delete(new MetadataPaths(storage).file("staging/index", false));
         }
         // Retire the barrier before permitting newer staging, even if bytes match.
-        files.delete(pendingFile);
+        files.delete(new MetadataPaths(storage).file("staging/commit.pending", false));
     }
 
     private boolean isPublished(Pending pending) throws Exception {
-        String head = Files.readString(storage.resolve("HEAD")).strip();
+        String head = new MetadataPaths(storage).readString("HEAD").strip();
         if (head.equals(pending.snapshotId())) {
             Snapshot snapshot = new SnapshotStore(storage).load(head);
             if (!snapshot.parentId().equals(pending.parentId())) {
                 throw new IOException("Commit recovery parent does not match the active snapshot");
             }
             try {
-                if (!fingerprint(index).equals(pending.indexHash())) {
+                if (!fingerprint().equals(pending.indexHash())) {
                     throw new IOException("Commit recovery found changed staging; refusing to clear it");
                 }
             } catch (NoSuchFileException alreadyCleaned) {
@@ -77,7 +74,7 @@ final class CommitRecovery {
     private Pending read() throws IOException {
         List<String> lines;
         try {
-            lines = Files.readAllLines(pendingFile);
+            lines = new MetadataPaths(storage).readLines("staging/commit.pending");
         } catch (NoSuchFileException absent) {
             return null;
         }
@@ -109,10 +106,10 @@ final class CommitRecovery {
         return parts[1];
     }
 
-    private String fingerprint(Path path) throws IOException {
+    private String fingerprint() throws IOException {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(Files.readAllBytes(path)));
+                    .digest(new MetadataPaths(storage).readBytes("staging/index")));
         } catch (NoSuchAlgorithmException failure) {
             throw new IllegalStateException("SHA-256 is required by Java", failure);
         }

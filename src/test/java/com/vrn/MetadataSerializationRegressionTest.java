@@ -38,6 +38,9 @@ class MetadataSerializationRegressionTest {
         vrnDirectory = tempDir.resolve(".vrn");
         Files.createDirectories(vrnDirectory.resolve("objects"));
         Files.createDirectories(vrnDirectory.resolve("snapshots"));
+        Files.createDirectories(vrnDirectory.resolve("staging"));
+        Files.writeString(vrnDirectory.resolve("config"), "version=1");
+        Files.writeString(vrnDirectory.resolve("HEAD"), "NONE");
         snapshotStore = new SnapshotStore(vrnDirectory);
     }
 

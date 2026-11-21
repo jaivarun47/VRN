@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -291,7 +292,8 @@ class VrnStatusTest {
 
         assertTrue(status.stagedNewFiles.contains("first.txt"),
                 "Staged file before first commit should appear as staged-new. stagedNew=" + status.stagedNewFiles);
-        assertTrue(status.deleted.isEmpty());
+        assertEquals(List.of("first.txt"), status.deleted,
+                "The staged selection has no working file, so its working deletion must also be visible.");
         assertTrue(status.modifiedNotStaged.isEmpty());
     }
 
@@ -313,8 +315,8 @@ class VrnStatusTest {
         // "staged new file" even though it is not on disk.
         assertTrue(status.stagedNewFiles.contains("ghost.txt"),
                 "Staged entry without on-disk file should appear as staged-new. stagedNew=" + status.stagedNewFiles);
-        assertFalse(status.deleted.contains("ghost.txt"),
-                "ghost.txt is in staging so it must NOT appear as deleted.");
+        assertTrue(status.deleted.contains("ghost.txt"),
+                "The independent working deletion must remain visible alongside staged-new.");
     }
 
     // ======================================================================
@@ -359,6 +361,7 @@ class VrnStatusTest {
         Path ignoreFile = tempDir.resolve(".vrnignore");
         String ignoreHash = new FileHasher().hash(ignoreFile);
         StagingArea staging = new StagingArea(vrnDir);
+        new com.vrn.core.ObjectStore(vrnDir).store(ignoreHash, Files.readAllBytes(ignoreFile));
         staging.stage(Path.of(".vrnignore"), ignoreHash);
 
         String firstCommitId = CommitCommand.executeCommit(tempDir, "Initial commit with .vrnignore");
@@ -373,6 +376,7 @@ class VrnStatusTest {
         Path secondFile = tempDir.resolve("hello.txt");
         Files.writeString(secondFile, "hello world");
         String secondHash = new FileHasher().hash(secondFile);
+        new com.vrn.core.ObjectStore(vrnDir).store(secondHash, Files.readAllBytes(secondFile));
         staging.stage(Path.of("hello.txt"), secondHash);
 
         // Second commit: only hello.txt was in staging index
@@ -408,6 +412,7 @@ class VrnStatusTest {
         Files.createDirectories(snapshotsDir);
         Files.createDirectories(stagingDir);
         Files.writeString(headFile, "NONE");
+        Files.writeString(vrnDir.resolve("config"), "version=1");
         Files.writeString(tempDir.resolve(".vrnignore"), ".vrn/\n");
     }
 

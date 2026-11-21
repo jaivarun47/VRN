@@ -35,6 +35,7 @@ class PublicationRecoveryTest {
         index = storage.resolve("staging/index");
         pending = storage.resolve("staging/commit.pending");
         Files.writeString(head, "NONE");
+        Files.writeString(storage.resolve("config"), "version=1");
         Path source = tempDir.resolve("source.txt");
         Files.writeString(source, "Actual stored content");
         FileHasher.HashedFile content = new FileHasher().hashWithBytes(source);
@@ -379,6 +380,8 @@ class PublicationRecoveryTest {
         assertThrows(IOException.class,
                 () -> new CommitService(storage, failMove(p -> p.equals(head))).commit("unpublished"));
         String before = Files.readString(index);
+        new SnapshotStore(storage).save(new Snapshot("externally-changed-head", "NONE", 1,
+                "valid but unexpected active snapshot", Map.of("old.txt", hash)));
         Files.writeString(head, "externally-changed-head");
 
         IOException failure = assertThrows(IOException.class, () -> new StagingArea(storage).recover());

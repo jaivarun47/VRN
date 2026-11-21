@@ -2,6 +2,10 @@ package com.vrn.core;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.channels.Channels;
+import java.util.Set;
 import java.security.MessageDigest;
 
 public class FileHasher {
@@ -11,10 +15,17 @@ public class FileHasher {
      * Kept for backward compatibility.
      */
     public String hash(Path file) throws Exception {
-        return hashWithBytes(file).hash();
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[ContentCapture.BUFFER_SIZE];
+        try (var channel = Files.newByteChannel(file, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
+             var input = Channels.newInputStream(channel)) {
+            for (int n; (n = input.read(buffer)) != -1;) digest.update(buffer, 0, n);
+        }
+        return bytesToHex(digest.digest());
     }
 
     /**
+     * Compatibility helper for callers explicitly requesting bytes; not used by add or status.
      * Reads the file once, computes its SHA-256 hash, and returns
      * both the hash and the raw bytes together.
      *
@@ -25,7 +36,11 @@ public class FileHasher {
      */
     public HashedFile hashWithBytes(Path file) throws Exception {
 
-        byte[] content = Files.readAllBytes(file);
+        byte[] content;
+        try (var channel = Files.newByteChannel(file, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
+             var input = Channels.newInputStream(channel)) {
+            content = input.readAllBytes();
+        }
 
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] hashBytes = digest.digest(content);
