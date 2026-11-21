@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
 
 /**
  * One scan's resolved-root boundary and actual-spelling checks. Directory resolutions
@@ -90,6 +91,55 @@ final class WorkingTreePaths {
         }
         return relative(parent, parent);
     }
+
+    /** Observe every destination component, including absent suffixes and blocking files.
+     * No directory is followed until its non-following attributes and boundary pass.
+     */
+    List<Probe> observeDestination(String stored) throws IOException {
+        SnapshotManifestValidator.validatePath(stored);
+        var result = new ArrayList<Probe>();
+        Path parent = realRoot;
+        String requestedPrefix = "";
+        boolean absent = false;
+        String blocker = null;
+        String problem = null;
+        for (String part : stored.split("/")) {
+            requestedPrefix = requestedPrefix.isEmpty() ? part : requestedPrefix + "/" + part;
+            Path actual = parent.resolve(part);
+            BasicFileAttributes attributes = null;
+            if (!absent && problem == null) {
+                List<String> candidates = names(parent).stream().filter(name -> name.equalsIgnoreCase(part)).toList();
+                if (candidates.size() > 1) {
+                    problem = "Ambiguous case-equivalent destination: " + requestedPrefix;
+                } else {
+                    try {
+                        attributes = Files.readAttributes(actual, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                        if (candidates.size() != 1) throw new IOException("Directory changed during destination observation");
+                        actual = parent.resolve(candidates.getFirst());
+                        if (attributes.isSymbolicLink() || attributes.isOther()
+                                || (!attributes.isRegularFile() && !attributes.isDirectory())) {
+                            problem = "Unsupported symbolic/reparse entry or file type: " + requestedPrefix;
+                        } else if (attributes.isDirectory()) {
+                            directory(actual);
+                        }
+                    } catch (NoSuchFileException missing) {
+                        absent = true;
+                        if (!candidates.isEmpty()) problem = "Case-sensitive or changing destination lookup is unsupported: " + requestedPrefix;
+                    }
+                }
+            }
+            String spelling = relative(actual, actual).toString().replace('\\', '/');
+            result.add(new Probe(requestedPrefix, spelling, attributes, blocker, problem));
+            if (attributes != null && attributes.isRegularFile()) {
+                blocker = spelling;
+                absent = true;
+            }
+            parent = actual;
+        }
+        return List.copyOf(result);
+    }
+
+    record Probe(String requested, String actual, BasicFileAttributes attributes, String blockingAncestor, String problem) {}
 
     private Path trackedFile(String stored, boolean allowReplacement) throws IOException {
         SnapshotManifestValidator.validatePath(stored);

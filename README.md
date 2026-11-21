@@ -91,6 +91,7 @@ The logical command name is `vrn`; this build does not install a system-wide
 | `commit -m "message"` | Apply staged PUT/DELETE selections to inherited files and publish a new snapshot. `--message` is also accepted. |
 | `status` | Compare HEAD, staged selections, and working files; report staged, unstaged, deleted, and untracked files. |
 | `log` | Inspect the complete committed parent chain from HEAD, newest first; never recover or modify repository state. |
+| `inspect <snapshot-id\|HEAD>` | Inspect one reachable snapshot and stream-verify every referenced SHA-256 object before listing its exact paths and hashes. |
 
 Root `--help`/`-h` and `--version`/`-V` are supported. Subcommand help flags are
 not currently enabled. Commands use the current directory; they do not search
@@ -171,6 +172,15 @@ commit recovery causes a read-only refusal; intentionally run an existing mutati
 command to perform recovery before retrying. No history flags are implemented.
 See [snapshot history](docs/snapshot-history.md) for validation and concurrency limits.
 
+`inspect HEAD` selects the active snapshot; `inspect <full-id>` selects an exact
+ID in the validated current ancestry. Prefixes, case-folded IDs, and unreachable
+manifests are rejected. File listings preserve spelling and sort by stored path.
+Corrupt/missing objects fail before normal output. Inspection creates no lock or
+temporary file and never performs recovery. A reusable Java `RestorePlanner`
+can describe whole-snapshot working-tree changes and conflicts without executing
+them; there is no `restore` command. See
+[snapshot inspection and restore planning](docs/snapshot-inspection.md).
+
 `.vrnignore` contains optional user ignore rules. Supported rules include comments,
 literal names, root-relative directory prefixes ending in `/`, and one-`*`
 prefix/suffix patterns. A leading `/` anchor, negation, and recursive `**`
@@ -190,9 +200,9 @@ files` and returns 0 without changing staging. See the
 - Deletion/unstaging selection is single-file only; no recursive, wildcard, or
   multi-path selection is provided. Empty staging cannot commit. Explicit unchanged
   PUTs retain the existing behavior of allowing an identical-content snapshot.
-- **Snapshot selection and restore commands are not available.** `log` inspects
-  only the ancestry reachable from HEAD; saved objects and manifests do not yet
-  provide a supported restoration workflow.
+- **Working-tree restoration is not available.** `inspect` selects and verifies
+  reachable snapshots; the core planning API reports proposed actions only.
+  There is no executing restore, checkout/reset, HEAD movement, or force option.
 - **Automatic versioning is not implemented.** `.vrnauto/` is reserved/protected;
   no daemon, monitoring, independent automatic history, or retention exists.
 - Arbitrary rename inference and similarity detection are unavailable. Supported

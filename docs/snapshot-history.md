@@ -79,6 +79,12 @@ set, loading each manifest through the existing codec and manifest validator.
 `SnapshotStore.loadAnchored` retains those checks while avoiding another HEAD
 read; public `SnapshotStore.load` keeps its existing preflight behavior.
 
+Task 9B reuses this traversal for exact reachable selection, retaining only the
+active and selected file maps in addition to display records. Ordinary `log`
+still discards the file maps. Staging is observed with a raw-byte fingerprint for
+planning revalidation; log's output and no-object-verification contract are
+unchanged. See [snapshot inspection](snapshot-inspection.md).
+
 Missing parents, repeated identifiers (including self-parenting), invalid IDs,
 unsupported versions, malformed fields/encodings, incorrect embedded identity,
 invalid paths, case aliases, and file/descendant conflicts all fail. A parent
