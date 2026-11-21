@@ -24,7 +24,20 @@ public final class RepositoryMutationGuard implements AutoCloseable {
     }
 
     public static RepositoryMutationGuard acquire(Path storage) throws IOException {
-        RepositoryLayout.preflight(storage);
+        return acquire(storage, false);
+    }
+
+    static RepositoryMutationGuard acquireForRestoreRecovery(Path storage) throws IOException {
+        return acquire(storage, true);
+    }
+
+    private static void preflight(Path storage, boolean recovery) throws IOException {
+        if (recovery) RepositoryLayout.inspectedHeadForRestoreRecovery(storage);
+        else RepositoryLayout.preflight(storage);
+    }
+
+    private static RepositoryMutationGuard acquire(Path storage, boolean recovery) throws IOException {
+        preflight(storage, recovery);
         Path lockPath = new MetadataPaths(storage).file("mutation.lock", false);
         FileChannel channel = FileChannel.open(lockPath,
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
@@ -39,7 +52,7 @@ public final class RepositoryMutationGuard implements AutoCloseable {
                 throw new IOException("Repository is busy; retry the operation: " + storage);
             }
             // Recheck under the guard; the first check makes acquiring the guard itself safe.
-            RepositoryLayout.preflight(storage);
+            preflight(storage, recovery);
             return new RepositoryMutationGuard(channel, lock);
         } catch (IOException | RuntimeException failure) {
             try {

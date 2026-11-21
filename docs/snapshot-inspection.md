@@ -1,5 +1,10 @@
 # Snapshot inspection and restore foundations — Task 9B
 
+Task 9C now adds an executor and explicit preview/recovery CLI on these unchanged
+planning foundations. Sections below describe the 9B API contract and historical
+verification; see [working-tree restoration](working-tree-restoration.md) for the
+current executing interface, recovery state machine and remaining limitations.
+
 ## Public command
 
 From an initialized project's root, using the executable JAR described in README:

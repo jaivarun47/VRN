@@ -3,6 +3,9 @@ package com.vrn.core;
 import java.io.IOException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +50,15 @@ public final class RepositoryLayout {
 
     /** Same observational gate, returning its one validated HEAD observation. Never locks or recovers. */
     static String inspectedHead(Path storage) throws IOException {
+        return inspectedHead(storage, false);
+    }
+
+    /** Only explicit restore recovery may cross the restore barrier; never performs recovery itself. */
+    static String inspectedHeadForRestoreRecovery(Path storage) throws IOException {
+        return inspectedHead(storage, true);
+    }
+
+    private static String inspectedHead(Path storage, boolean restoreRecovery) throws IOException {
         MetadataPaths paths = new MetadataPaths(storage);
         for (String directory : List.of("objects", "snapshots", "staging")) paths.directory(directory);
         // Check all known metadata leaves before reading any of them or creating the lock.
@@ -55,6 +67,15 @@ public final class RepositoryLayout {
         paths.file("staging/index", false);
         paths.file("staging/commit.pending", false);
         paths.file("mutation.lock", false);
+        Path restoreRecord = paths.file("restore.pending", false);
+        boolean pendingRestore = present(restoreRecord);
+        if (present(storage.resolve("restore-work"))) {
+            paths.directory("restore-work");
+            pendingRestore = true;
+        }
+        if (pendingRestore && !restoreRecovery) {
+            throw new IOException("Pending working-tree restoration; run 'vrn restore --recover'. No recovery was performed");
+        }
         validateConfig(paths.readLines("config"));
         List<String> lines = paths.readLines("HEAD");
         if (lines.size() != 1 || lines.getFirst().strip().isEmpty()) {
@@ -67,6 +88,11 @@ public final class RepositoryLayout {
             paths.file("snapshots/" + id + ".snapshot", true);
         }
         return id;
+    }
+
+    private static boolean present(Path path) throws IOException {
+        try { Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS); return true; }
+        catch (NoSuchFileException absent) { return false; }
     }
 
     private static void validateConfig(List<String> lines) throws IOException {

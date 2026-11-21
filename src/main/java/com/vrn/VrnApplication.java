@@ -8,6 +8,7 @@ import com.vrn.cli.StageDeleteCommand;
 import com.vrn.cli.UnstageCommand;
 import com.vrn.cli.LogCommand;
 import com.vrn.cli.InspectCommand;
+import com.vrn.cli.RestoreCommand;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
@@ -24,7 +25,8 @@ import picocli.CommandLine.Command;
                 StageDeleteCommand.class,
                 UnstageCommand.class,
                 LogCommand.class,
-                InspectCommand.class
+                InspectCommand.class,
+                RestoreCommand.class
         }
 )
 public class VrnApplication implements Runnable {

@@ -92,6 +92,9 @@ The logical command name is `vrn`; this build does not install a system-wide
 | `status` | Compare HEAD, staged selections, and working files; report staged, unstaged, deleted, and untracked files. |
 | `log` | Inspect the complete committed parent chain from HEAD, newest first; never recover or modify repository state. |
 | `inspect <snapshot-id\|HEAD>` | Inspect one reachable snapshot and stream-verify every referenced SHA-256 object before listing its exact paths and hashes. |
+| `restore <snapshot-id\|HEAD>` | Recover whole-snapshot working contents without moving HEAD or changing staging; refuse conflicting work. |
+| `restore --plan <snapshot-id\|HEAD>` | Read-only preview of actions, prerequisites, conflicts, and unsupported paths. |
+| `restore --recover` | Explicitly roll back an interrupted restore, or finish confirmed restoration/rollback cleanup. |
 
 Root `--help`/`-h` and `--version`/`-V` are supported. Subcommand help flags are
 not currently enabled. Commands use the current directory; they do not search
@@ -178,8 +181,19 @@ manifests are rejected. File listings preserve spelling and sort by stored path.
 Corrupt/missing objects fail before normal output. Inspection creates no lock or
 temporary file and never performs recovery. A reusable Java `RestorePlanner`
 can describe whole-snapshot working-tree changes and conflicts without executing
-them; there is no `restore` command. See
+them. See
 [snapshot inspection and restore planning](docs/snapshot-inspection.md).
+
+`restore` executes a revalidated safe plan under the repository writer lock.
+It verifies original backups and prepared target contents before working changes,
+then records progress in a separate restore journal. It preserves HEAD, staging,
+history, objects, and unrelated untracked/ignored files. Normal commands refuse
+pending restore state; use `restore --recover` explicitly. This initial executor
+is qualified on Windows NTFS and refuses read-only working originals. It uses
+non-replacing renames and hard-link publication, rather than writing partial
+contents over working files. There are no force options. See
+[safe restoration and recovery](docs/working-tree-restoration.md) for the recovery
+protocol, disk-space requirements, external-race limits and durability contract.
 
 `.vrnignore` contains optional user ignore rules. Supported rules include comments,
 literal names, root-relative directory prefixes ending in `/`, and one-`*`
@@ -200,9 +214,11 @@ files` and returns 0 without changing staging. See the
 - Deletion/unstaging selection is single-file only; no recursive, wildcard, or
   multi-path selection is provided. Empty staging cannot commit. Explicit unchanged
   PUTs retain the existing behavior of allowing an identical-content snapshot.
-- **Working-tree restoration is not available.** `inspect` selects and verifies
-  reachable snapshots; the core planning API reports proposed actions only.
-  There is no executing restore, checkout/reset, HEAD movement, or force option.
+- Restoration is whole-snapshot and conflict-preserving. No file-specific scope,
+  checkout/reset, HEAD movement, force mode or automatic conflict resolution is
+  available. Recoverable multi-file changes are not an atomic whole-tree update;
+  unsupported or unexpected state can require manual investigation with backups
+  retained. No power-loss durability guarantee is provided.
 - **Automatic versioning is not implemented.** `.vrnauto/` is reserved/protected;
   no daemon, monitoring, independent automatic history, or retention exists.
 - Arbitrary rename inference and similarity detection are unavailable. Supported

@@ -32,7 +32,14 @@ public final class SnapshotHistory {
     }
 
     SnapshotResolver.Selection select(String selector) throws Exception {
-        ReadResult result = walk(selector);
+        return selection(selector, walk(selector));
+    }
+
+    SnapshotResolver.Selection selectForRestoreRecovery(String selector) throws Exception {
+        return selection(selector, walk(selector, true));
+    }
+
+    private SnapshotResolver.Selection selection(String selector, ReadResult result) throws Exception {
         if (result.target() == null) {
             if (selector.equals("HEAD") && result.head() == null) throw new IOException("No current snapshot: HEAD is NONE");
             throw new IOException("Snapshot '" + selector + "' is not in the current reachable history");
@@ -42,7 +49,11 @@ public final class SnapshotHistory {
     }
 
     private ReadResult walk(String selector) throws Exception {
-        String current=RepositoryLayout.inspectedHead(storage);
+        return walk(selector, false);
+    }
+
+    private ReadResult walk(String selector, boolean recovery) throws Exception {
+        String current = recovery ? RepositoryLayout.inspectedHeadForRestoreRecovery(storage) : RepositoryLayout.inspectedHead(storage);
         requireNoPendingRecovery(storage);
         StagingObservation staging = observeIndex(storage);
         var visited=new HashSet<String>();
